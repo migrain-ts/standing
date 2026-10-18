@@ -30,6 +30,7 @@ export const MATRIX: Row[] = [
   { method: 'PUT', pattern: '/tenants/:tenantId/events/:eventId/tiers', min: 'manager', url: (f) => `/tenants/${f.tenantId}/events/${f.draftEventId}/tiers`, body: (f) => [{ sectionId: f.sectionId, priceCents: 1000 }] },
   { method: 'POST', pattern: '/tenants/:tenantId/events/:eventId/publish', min: 'manager', url: (f) => `/tenants/${f.tenantId}/events/${f.draftEventId}/publish` },
   { method: 'POST', pattern: '/tenants/:tenantId/events/:eventId/close', min: 'manager', url: (f) => `/tenants/${f.tenantId}/events/${f.eventId}/close` },
+  { method: 'POST', pattern: '/tenants/:tenantId/events/:eventId/reports', min: 'manager', url: (f) => `/tenants/${f.tenantId}/events/${f.eventId}/reports`, body: { kind: 'report_pdf' } },
   { method: 'GET', pattern: '/tenants/:tenantId/events/:eventId/live/snapshot', min: 'manager', url: (f) => `/tenants/${f.tenantId}/events/${f.eventId}/live/snapshot` },
   { method: 'GET', pattern: '/tenants/:tenantId/events/:eventId/live', min: 'manager', url: (f) => `/tenants/${f.tenantId}/events/${f.eventId}/live` },
 ];
@@ -40,7 +41,7 @@ export const AUTHED_ROUTES = new Set(['POST /auth/logout', 'GET /auth/me', 'GET 
 /** Routes whose authorization is a row-level check inside the handler (own orders, door scan, ...). Later tasks add theirs. */
 export const SELF_CHECKED_ROUTES = new Set(['POST /public/events/:eventId/holds', 'GET /holds/:holdId', 'DELETE /holds/:holdId',
   'POST /holds/:holdId/pay', 'GET /me/orders', 'GET /orders/:orderId',
-  'POST /door/scan', 'GET /door/events']);
+  'POST /door/scan', 'GET /door/events', 'GET /documents/:documentId', 'GET /documents/:documentId/download']);
 /** Routes open to everyone. */
 export const PUBLIC_ROUTES = new Set([
   'POST /auth/register', 'POST /auth/login', 'POST /auth/demo',

@@ -36,6 +36,7 @@ export async function makeApp(
     app, svc, deps, db: t.db, pool: t.pool, clock,
     close: async () => {
       await svc.liveBus.stop();
+      await svc.documentQueue?.close();
       await t.close();
     },
   };

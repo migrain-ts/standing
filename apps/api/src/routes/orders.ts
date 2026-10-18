@@ -1,5 +1,6 @@
 import { desc, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
+import { enqueueDocument } from '@standing/core';
 import { schema } from '@standing/db';
 import type { AuthUser, Deps, Env } from '../app';
 import { requireAuth } from '../auth/middleware';
@@ -35,6 +36,7 @@ export function orderRoutes(deps: Pick<Deps, 'redis' | 'clock'>) {
           // best effort: the admission expires on its own
         }
       }
+      if (!res.replayed && res.order.documentId) await enqueueDocument(c.get('svc').documentQueue, res.order.documentId); // after commit; the sweeper recovers failures
       return c.json({ order: res.order }, 201);
     })
     .get('/me/orders', requireAuth, async (c) => {

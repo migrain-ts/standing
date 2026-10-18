@@ -5,13 +5,25 @@
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
-  "scripts": { "test": "vitest run", "typecheck": "tsc -p .", "start": "tsx src/main.ts", "dev": "tsx watch src/main.ts" },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p .",
+    "start": "tsx src/main.ts",
+    "dev": "tsx watch src/main.ts"
+  },
   "dependencies": {
     "@standing/core": "0.0.0",
     "@standing/db": "0.0.0",
     "@standing/shared": "0.0.0",
+    "bullmq": "6.3.16",
     "drizzle-orm": "0.45.4",
     "ioredis": "6.0.0",
+    "pdfkit": "0.20.2",
+    "qrcode": "1.5.4",
     "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/pdfkit": "0.17.6",
+    "@types/qrcode": "1.5.6"
   }
 }

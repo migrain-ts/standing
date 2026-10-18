@@ -1,9 +1,10 @@
 import { Hono } from 'hono';
-import { asId, eventCreateSchema, eventUpdateSchema, tiersSchema, type TenantId } from '@standing/shared';
+import { asId, eventCreateSchema, eventUpdateSchema, reportRequestSchema, tiersSchema, type TenantId } from '@standing/shared';
 import type { Env } from '../app';
 import { requireAuth } from '../auth/middleware';
 import { requireTenantRole } from '../authz';
 import { closeEvent, createEvent, listTenantEvents, loadTenantEvent, publishEvent, setTiers, updateEvent } from '../services/events';
+import { requestReport } from '../services/documents';
 import { validator } from '../validate';
 
 const BASE = '/tenants/:tenantId/events';
@@ -31,6 +32,13 @@ export function eventRoutes() {
       const d = c.get('deps');
       await publishEvent(d.db, d.clock, tenant(c), c.req.param('eventId'));
       return c.json({ ok: true });
+    })
+    .post(`${BASE}/:eventId/reports`, requireTenantRole('manager'), validator('json', reportRequestSchema), async (c) => {
+      const d = c.get('deps');
+      const document = await requestReport(d, c.get('svc').documentQueue, {
+        tenantId: tenant(c), eventId: c.req.param('eventId'), userId: c.get('user').id,
+      });
+      return c.json({ document }, 202);
     })
     .post(`${BASE}/:eventId/close`, requireTenantRole('manager'), async (c) => {
       await closeEvent(c.get('deps').db, tenant(c), c.req.param('eventId'));

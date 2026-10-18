@@ -84,7 +84,7 @@ describe('hold routes', () => {
 
   it('fails open when Redis is broken', async () => {
     const broken = new Proxy({} as Redis, { get: () => () => Promise.reject(new Error('down')) });
-    const bt = await makeApp({ redis: broken });
+    const bt = await makeApp({ redis: broken, noDocumentQueue: true });
     const f = await makeTenantFixture(bt);
     await bt.db.execute(sql`update events set admission_limit = 1 where id = ${f.eventId}::uuid`);
     const u = await makeUser(bt, 'u');

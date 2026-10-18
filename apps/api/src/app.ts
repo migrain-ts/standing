@@ -1,11 +1,14 @@
+import { Queue } from 'bullmq';
 import { Hono } from 'hono';
 import type { Redis } from 'ioredis';
 import type { Db } from '@standing/db';
 import type { Clock, TenantRoleName } from '@standing/shared';
+import { DOCUMENT_QUEUE } from '@standing/core';
 import { authRoutes } from './auth/routes';
 import { errorHandler } from './errors';
 import { tenantRoutes } from './routes/tenants';
 import { doorRoutes } from './routes/door';
+import { documentRoutes } from './routes/documents';
 import { eventRoutes } from './routes/events';
 import { holdRoutes } from './routes/holds';
 import { orderRoutes } from './routes/orders';
@@ -47,8 +50,11 @@ export type Services = {
   waitingRoom?: WaitingRoom;
   liveBus: LiveBus;
   totals: TtlCache<Totals>;
+  documentQueue?: Queue;
 };
 export type AppOptions = {
+  /** Test seam: skip building the BullMQ queue (for stub Redis clients that cannot back a real queue). */
+  noDocumentQueue?: boolean;
   /** Test seam: wraps the totals loader (e.g. to count computations). */
   wrapTotalsLoader?: (load: (eventId: string) => Promise<Totals>) => (eventId: string) => Promise<Totals>;
 };
@@ -63,9 +69,12 @@ export function createApp(deps: Deps, opts: AppOptions = {}) {
 export function createAppWithServices(deps: Deps, opts: AppOptions = {}) {
   const wrap = opts.wrapTotalsLoader ?? ((l) => l);
   const waitingRoom = deps.redis ? new WaitingRoom(deps.redis, deps.clock) : undefined;
+  const documentQueue = deps.redis && !opts.noDocumentQueue ? new Queue(DOCUMENT_QUEUE, { connection: deps.redis }) : undefined;
+  documentQueue?.on('error', () => {}); // Redis outages are expected: the sweeper recovers unenqueued documents
   const svc: Services = {
     availability: new TtlCache(availabilityLoader(deps.db, deps.clock), deps.clock),
     ...(waitingRoom ? { waitingRoom } : {}),
+    ...(documentQueue ? { documentQueue } : {}),
     liveBus: new LiveBus(deps.liveSub),
     totals: new TtlCache(wrap(totalsLoader(deps, waitingRoom)), deps.clock, 1000),
   };
@@ -85,6 +94,7 @@ export function createAppWithServices(deps: Deps, opts: AppOptions = {}) {
     .route('/', queueRoutes(deps))
     .route('/', holdRoutes(deps))
     .route('/', orderRoutes(deps))
+    .route('/', documentRoutes())
     .route('/', doorRoutes())
     .route('/', liveRoutes());
   return { app, svc };

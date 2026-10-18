@@ -18,6 +18,7 @@
     "@standing/core": "0.0.0",
     "@standing/db": "0.0.0",
     "@standing/shared": "0.0.0",
+    "bullmq": "6.3.16",
     "drizzle-orm": "0.45.4",
     "hono": "4.13.13",
     "ioredis": "6.0.0",
