@@ -18,6 +18,9 @@ export const MATRIX: Row[] = [
   { method: 'POST', pattern: '/tenants/:tenantId/members', min: 'owner', url: (f) => `/tenants/${f.tenantId}/members`, body: { email: 'nobody@example.com', role: 'door' } },
   { method: 'PATCH', pattern: '/tenants/:tenantId/members/:userId', min: 'owner', url: (f) => `/tenants/${f.tenantId}/members/${f.door.id}`, body: { role: 'door' } },
   { method: 'DELETE', pattern: '/tenants/:tenantId/members/:userId', min: 'owner', url: (f) => `/tenants/${f.tenantId}/members/${f.door.id}` },
+  { method: 'GET', pattern: '/tenants/:tenantId/venues', min: 'manager', url: (f) => `/tenants/${f.tenantId}/venues` },
+  { method: 'POST', pattern: '/tenants/:tenantId/venues', min: 'manager', url: (f) => `/tenants/${f.tenantId}/venues`, body: { name: 'V', sections: [{ name: 'A', rows: 1, seatsPerRow: 2 }] } },
+  { method: 'GET', pattern: '/tenants/:tenantId/venues/:venueId', min: 'manager', url: (f) => `/tenants/${f.tenantId}/venues/${f.venueId}` },
 ];
 
 /** Routes that need a session but no tenant role. They must answer 401 anonymously. */
@@ -46,6 +49,15 @@ describe('route coverage', () => {
     const known = new Set([...MATRIX.map((r) => `${r.method} ${r.pattern}`), ...AUTHED_ROUTES, ...SELF_CHECKED_ROUTES, ...PUBLIC_ROUTES]);
     expect(registered.filter((r) => !known.has(r))).toEqual([]);
   });
+  it('no exempt route is tenant-scoped (those must live in the matrix)', () => {
+    const exempt = [...AUTHED_ROUTES, ...SELF_CHECKED_ROUTES, ...PUBLIC_ROUTES];
+    expect(exempt.filter((k) => k.includes(':tenantId'))).toEqual([]);
+  });
+  it('every matrix row is a registered route (no stale rows)', () => {
+    const app = createApp(t.deps);
+    const registered = new Set(app.routes.map((r) => `${r.method} ${r.path}`));
+    expect(MATRIX.map((r) => `${r.method} ${r.pattern}`).filter((k) => !registered.has(k))).toEqual([]);
+  });
   it('every session-only and self-checked route rejects anonymous callers with 401', async () => {
     for (const key of [...AUTHED_ROUTES, ...SELF_CHECKED_ROUTES]) {
       const [method, pattern] = key.split(' ') as [string, string];
@@ -73,7 +85,10 @@ for (const row of MATRIX) {
         const f = await makeTenantFixture(t);
         const res = await call(t.app, f[role].cookie, row.method, row.url(f), row.body);
         if (rank[role] < rank[row.min]) expect(res.status).toBe(403);
-        else expect([401, 403]).not.toContain(res.status);
+        else {
+          expect([401, 403]).not.toContain(res.status);
+          expect(res.status).toBeLessThan(500);
+        }
       });
     }
   });
