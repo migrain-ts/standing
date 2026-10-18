@@ -1,20 +1,91 @@
+# LOCAL DEMO STACK ONLY. It seeds fictional data, ships a known demo password (standing-demo-1), enables the
+# one-click demo logins and insecure cookies, and uses throwaway secrets. It must never be exposed to a network:
+# every published port is bound to 127.0.0.1. Use `docker compose -p standing up --build -d --wait`.
 name: standing
+# The api runs the migrations on start, so every other node service waits for it to be healthy.
+x-node: &node
+  restart: unless-stopped
+  depends_on:
+    postgres: { condition: service_healthy }
+    redis: { condition: service_healthy }
+    api: { condition: service_healthy }
+x-env: &env
+  DATABASE_URL: postgres://standing:standing@postgres:5432/standing
+  REDIS_URL: redis://redis:6379
+  TICKET_SECRET: demo-only-ticket-secret
 services:
   postgres:
     image: postgres:17
+    restart: unless-stopped
     environment:
       POSTGRES_USER: standing
       POSTGRES_PASSWORD: standing
       POSTGRES_DB: standing
     ports: ["127.0.0.1:5441:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U standing"]
       interval: 3s
       retries: 20
   redis:
     image: redis:7
+    restart: unless-stopped
     ports: ["127.0.0.1:6380:6379"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 3s
       retries: 20
+  api:
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    build: { context: ., dockerfile: docker/node.Dockerfile, args: { APP: api } }
+    ports: ["127.0.0.1:4100:4100"]
+    environment:
+      <<: *env
+      NODE_ENV: production
+      API_PORT: "4100"
+      APP_URL: http://127.0.0.1:3200
+      SEED_DEMO: "1"
+      DEMO_LOGIN: "1"
+      TRUST_PROXY: "1"
+      INSECURE_COOKIES: "1"
+      HOLD_TTL_SECONDS: "600"
+      SIMULATOR_URL: http://simulator:4200
+      SIMULATOR_TOKEN: demo-only-simulator-token
+      SIMULATOR_API_URL: http://api:4100
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4100/public/events').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 3s
+      retries: 40
+      start_period: 20s
+  worker:
+    <<: *node
+    build: { context: ., dockerfile: docker/node.Dockerfile, args: { APP: worker } }
+    environment:
+      <<: *env
+      NODE_ENV: production
+  simulator:
+    <<: *node
+    build: { context: ., dockerfile: docker/node.Dockerfile, args: { APP: simulator } }
+    # No host port: only the api reaches it, over the compose network.
+    environment:
+      DATABASE_URL: postgres://standing:standing@postgres:5432/standing
+      SIMULATOR_TOKEN: demo-only-simulator-token
+      API_URL: http://api:4100
+      PORT: "4200"
+  web:
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+      args:
+        API_URL: http://api:4100
+        # Build-time: the three demo-login buttons exist only if this is set when the image is built.
+        NEXT_PUBLIC_DEMO_LOGIN: "1"
+    ports: ["127.0.0.1:3200:3000"]
+    depends_on:
+      api: { condition: service_healthy }
+volumes:
+  pgdata:
