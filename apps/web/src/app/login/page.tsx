@@ -24,7 +24,7 @@ function LoginForm() {
   const login = useMutation({
     mutationFn: () => api('/auth/login', { method: 'POST', json: { email, password } }),
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ME_KEY });
+      await qc.invalidateQueries({ queryKey: ME_KEY, refetchType: 'all' }); // the cached anonymous 'me' may have no observer here
       router.replace(next);
     },
   });

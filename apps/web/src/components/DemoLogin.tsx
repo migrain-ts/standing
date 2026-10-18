@@ -19,7 +19,7 @@ export function DemoLogin({ next }: { next: string | null }) {
   const login = useMutation({
     mutationFn: ({ persona }: { persona: DemoPersona; landing: string }) => api('/auth/demo', { method: 'POST', json: { persona } }),
     onSuccess: async (_data, { landing }) => {
-      await qc.invalidateQueries({ queryKey: ME_KEY });
+      await qc.invalidateQueries({ queryKey: ME_KEY, refetchType: 'all' }); // the cached anonymous 'me' may have no observer here
       router.replace(next ?? landing);
     },
   });

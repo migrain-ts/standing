@@ -23,7 +23,7 @@ function RegisterForm() {
   const register = useMutation({
     mutationFn: () => api('/auth/register', { method: 'POST', json: { name, email, password } }),
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ME_KEY });
+      await qc.invalidateQueries({ queryKey: ME_KEY, refetchType: 'all' }); // the cached anonymous 'me' may have no observer here
       router.replace(next);
     },
   });
