@@ -3,6 +3,7 @@ import type { Db } from '@standing/db';
 import type { Clock, TenantRoleName } from '@standing/shared';
 import { authRoutes } from './auth/routes';
 import { errorHandler } from './errors';
+import { tenantRoutes } from './routes/tenants';
 
 export type AppConfig = {
   holdTtlSeconds: number;
@@ -34,7 +35,8 @@ export function createApp(deps: Deps) {
     })
     .onError(errorHandler)
     .notFound((c) => c.json({ error: { code: 'not_found', message: 'Not found' } }, 404))
-    .route('/auth', authRoutes(deps));
+    .route('/auth', authRoutes(deps))
+    .route('/', tenantRoutes());
 }
 
 export type AppType = ReturnType<typeof createApp>;

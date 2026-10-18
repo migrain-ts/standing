@@ -14,3 +14,8 @@ export const demoLoginSchema = z.object({ persona: z.enum(Object.keys(DEMO_USERS
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type DemoLoginInput = z.infer<typeof demoLoginSchema>;
+
+export const tenantRoleSchema = z.enum(['owner', 'manager', 'door']);
+export const tenantCreateSchema = z.object({ name: z.string().trim().min(1).max(100) });
+export const memberAddSchema = z.object({ email, role: tenantRoleSchema });
+export const memberUpdateSchema = z.object({ role: tenantRoleSchema });

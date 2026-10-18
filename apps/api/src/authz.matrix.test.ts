@@ -1,0 +1,80 @@
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import type { TenantRoleName } from '@standing/shared';
+import { createApp } from './app';
+import { makeTenantFixture, type TenantFixture } from './fixtures';
+import { call, makeApp, type TestApp } from './test-helpers';
+
+type Row = {
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  pattern: string;
+  min: TenantRoleName;
+  url: (f: TenantFixture) => string;
+  body?: unknown;
+};
+
+// Every route under /tenants/:tenantId/* MUST have a row here. Later tasks append their rows.
+export const MATRIX: Row[] = [
+  { method: 'GET', pattern: '/tenants/:tenantId/members', min: 'manager', url: (f) => `/tenants/${f.tenantId}/members` },
+  { method: 'POST', pattern: '/tenants/:tenantId/members', min: 'owner', url: (f) => `/tenants/${f.tenantId}/members`, body: { email: 'nobody@example.com', role: 'door' } },
+  { method: 'PATCH', pattern: '/tenants/:tenantId/members/:userId', min: 'owner', url: (f) => `/tenants/${f.tenantId}/members/${f.door.id}`, body: { role: 'door' } },
+  { method: 'DELETE', pattern: '/tenants/:tenantId/members/:userId', min: 'owner', url: (f) => `/tenants/${f.tenantId}/members/${f.door.id}` },
+];
+
+/** Routes that need a session but no tenant role. They must answer 401 anonymously. */
+export const AUTHED_ROUTES = new Set(['POST /auth/logout', 'GET /auth/me', 'GET /tenants', 'POST /tenants']);
+/** Routes whose authorization is a row-level check inside the handler (own orders, door scan, ...). Later tasks add theirs. */
+export const SELF_CHECKED_ROUTES = new Set<string>();
+/** Routes open to everyone. */
+export const PUBLIC_ROUTES = new Set(['POST /auth/register', 'POST /auth/login', 'POST /auth/demo']);
+
+const rank: Record<TenantRoleName, number> = { door: 1, manager: 2, owner: 3 };
+let t: TestApp;
+beforeAll(async () => {
+  t = await makeApp();
+});
+afterAll(async () => {
+  await t.close();
+});
+
+const concrete = (pattern: string) =>
+  pattern.replace(/:[A-Za-z]+/g, '3f2b8d2e-9d57-4f0a-8f3e-2a1c5d6e7f80');
+
+describe('route coverage', () => {
+  it('every registered route is in the matrix or explicitly exempt', () => {
+    const app = createApp(t.deps);
+    const registered = app.routes.filter((r) => r.method !== 'ALL').map((r) => `${r.method} ${r.path}`);
+    const known = new Set([...MATRIX.map((r) => `${r.method} ${r.pattern}`), ...AUTHED_ROUTES, ...SELF_CHECKED_ROUTES, ...PUBLIC_ROUTES]);
+    expect(registered.filter((r) => !known.has(r))).toEqual([]);
+  });
+  it('every session-only and self-checked route rejects anonymous callers with 401', async () => {
+    for (const key of [...AUTHED_ROUTES, ...SELF_CHECKED_ROUTES]) {
+      const [method, pattern] = key.split(' ') as [string, string];
+      const res = await call(t.app, null, method, concrete(pattern), method === 'GET' ? undefined : {});
+      expect(res.status, key).toBe(401);
+    }
+  });
+  it('unknown anonymous paths are 404, not 401', async () => {
+    expect((await call(t.app, null, 'GET', '/nope')).status).toBe(404);
+  });
+});
+
+for (const row of MATRIX) {
+  describe(`${row.method} ${row.pattern}`, () => {
+    it('401 when anonymous', async () => {
+      const f = await makeTenantFixture(t);
+      expect((await call(t.app, null, row.method, row.url(f), row.body)).status).toBe(401);
+    });
+    it('404 for a member of another tenant (never 403)', async () => {
+      const f = await makeTenantFixture(t);
+      expect((await call(t.app, f.outsider.cookie, row.method, row.url(f), row.body)).status).toBe(404);
+    });
+    for (const role of ['door', 'manager', 'owner'] as const) {
+      it(`${role}: ${rank[role] < rank[row.min] ? '403' : 'allowed'}`, async () => {
+        const f = await makeTenantFixture(t);
+        const res = await call(t.app, f[role].cookie, row.method, row.url(f), row.body);
+        if (rank[role] < rank[row.min]) expect(res.status).toBe(403);
+        else expect([401, 403]).not.toContain(res.status);
+      });
+    }
+  });
+}
