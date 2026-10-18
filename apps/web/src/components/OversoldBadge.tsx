@@ -33,7 +33,8 @@ export function OversoldBadge({ oversold }: { oversold: number }) {
         </output>
       </div>
       <p className="max-w-sm text-sm text-muted-foreground">
-        <span className={cn('font-medium', ok ? 'text-success' : 'text-destructive')}>{ok ? 'No seat sold twice.' : 'Seats sold more than once.'}</span>{' '}
+        {/* Small text: destructive red is only 3.79:1 on the card, so the sentence stays in the foreground colour (the border, glyph and number carry the colour). */}
+        <span className={cn('font-semibold', ok ? 'text-success' : 'text-foreground')}>{ok ? 'No seat sold twice.' : 'Seats sold more than once.'}</span>{' '}
         Computed in SQL: tickets issued minus seats sold
       </p>
     </section>

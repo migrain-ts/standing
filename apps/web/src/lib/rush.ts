@@ -51,3 +51,10 @@ export function describeRun(run: RushRunView, now: number = Date.now()): { progr
   const label = run.status === 'running' ? 'Running' : run.status === 'finished' ? 'Run finished' : run.status === 'stopped' ? 'Run stopped' : 'Run failed';
   return { progress, label, rate };
 }
+
+/** The slider grid: buyers start at 100 (validateRush still accepts 1..5000). */
+export const RUSH_SLIDER = {
+  buyers: { min: 100, max: 5000, step: 100 },
+  maxSeatsPerBuyer: { min: 1, max: 4, step: 1 },
+  durationSeconds: { min: 5, max: 300, step: 5 },
+} as const satisfies Record<keyof RushForm, { min: number; max: number; step: number }>;

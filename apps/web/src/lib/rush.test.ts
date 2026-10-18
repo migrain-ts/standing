@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { describeRun, validateRush, type RushRunView } from './rush';
+import { RUSH_DEFAULTS, RUSH_SLIDER, RUSH_LIMITS, describeRun, validateRush, type RushRunView } from './rush';
 
 const ok = { buyers: 300, maxSeatsPerBuyer: 2, durationSeconds: 10 };
 
@@ -43,5 +43,19 @@ describe('describeRun', () => {
     const d = describeRun(r, T);
     expect(d.label).toBe('Run stopped');
     expect(d.rate).toBe(10);
+  });
+});
+
+describe('slider grid', () => {
+  it('buyers slider runs 100..5000 in steps of 100 and the default sits on the grid', () => {
+    expect(RUSH_SLIDER.buyers).toEqual({ min: 100, max: 5000, step: 100 });
+    for (const k of Object.keys(RUSH_SLIDER) as (keyof typeof RUSH_SLIDER)[]) {
+      const { min, max, step } = RUSH_SLIDER[k];
+      expect((RUSH_DEFAULTS[k] - min) % step).toBe(0);
+      expect(RUSH_DEFAULTS[k]).toBeGreaterThanOrEqual(min);
+      expect(RUSH_DEFAULTS[k]).toBeLessThanOrEqual(max);
+      expect(min).toBeGreaterThanOrEqual(RUSH_LIMITS[k].min); // the slider never leaves the API limits
+      expect(max).toBeLessThanOrEqual(RUSH_LIMITS[k].max);
+    }
   });
 });

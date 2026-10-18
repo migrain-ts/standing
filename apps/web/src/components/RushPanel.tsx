@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Slider } from '@/components/ui/slider';
-import { RUSH_DEFAULTS, RUSH_LIMITS, describeRun, validateRush, type RushForm, type RushRunView } from '@/lib/rush';
+import { RUSH_DEFAULTS, RUSH_SLIDER, describeRun, validateRush, type RushForm, type RushRunView } from '@/lib/rush';
 
 export type RushControl = {
   run: RushRunView | null;
@@ -42,7 +42,7 @@ function Counters({ run }: { run: RushRunView }) {
 function SliderRow({ id, label, value, unit, field, onChange, disabled }: {
   id: string; label: string; value: number; unit: string; field: keyof RushForm; onChange: (v: number) => void; disabled: boolean;
 }) {
-  const { min, max } = RUSH_LIMITS[field];
+  const { min, max, step } = RUSH_SLIDER[field];
   return (
     <div className="space-y-2">
       <div className="flex items-baseline justify-between gap-3 text-sm">
@@ -53,7 +53,7 @@ function SliderRow({ id, label, value, unit, field, onChange, disabled }: {
         aria-labelledby={id}
         min={min}
         max={max}
-        step={field === 'buyers' ? 100 : field === 'durationSeconds' ? 5 : 1}
+        step={step}
         value={[value]}
         disabled={disabled}
         onValueChange={(v) => onChange(Array.isArray(v) ? (v[0] ?? value) : v)}

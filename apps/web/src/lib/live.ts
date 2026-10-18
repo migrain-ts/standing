@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 /** Pure live-dashboard state. No DOM, no timers: callers pass `now`. */
 export type Totals = {
   sold: number;
@@ -138,16 +140,90 @@ export function pruneFlashes(state: LiveState, now: number): LiveState {
   return { ...state, flashing: new Map([...state.flashing].filter(([, end]) => end > now)) };
 }
 
-/** The tick carries the authoritative totals: they replace whatever the deltas accumulated. */
+/**
+ * The tick carries the authoritative totals. Deltas are exact, so a tick LOWER than what is already shown is a stale
+ * one: the display never goes down (sold and revenue keep the larger value) until a tick catches up.
+ */
 export function applyTick(state: LiveState, tick: LiveTick, now: number): LiveState {
   const pruned = pruneFlashes(state, now);
+  const shown = pruned.snapshot.totals;
+  const capacity = pruned.snapshot.capacity;
+  const sold = Math.min(capacity, Math.max(shown.sold, tick.totals.sold));
+  const revenueCents = Math.max(shown.revenueCents, tick.totals.revenueCents);
   const ahead = {
-    sold: Math.max(0, tick.totals.sold - pruned.derived.sold),
-    revenueCents: Math.max(0, tick.totals.revenueCents - pruned.derived.revenueCents),
+    sold: Math.max(0, sold - pruned.derived.sold),
+    revenueCents: Math.max(0, revenueCents - pruned.derived.revenueCents),
   };
-  return { ...pruned, ahead, snapshot: { ...pruned.snapshot, totals: tick.totals }, connected: true, lastTickAt: now };
+  const available = sold === tick.totals.sold ? tick.totals.available : Math.max(0, capacity - sold - tick.totals.held);
+  return { ...pruned, ahead, snapshot: { ...pruned.snapshot, totals: { ...tick.totals, sold, revenueCents, available } }, connected: true, lastTickAt: now };
 }
 
 export function staleness(state: LiveState, now: number): 'live' | 'stale' {
   return state.lastTickAt !== null && now - state.lastTickAt < STALE_MS ? 'live' : 'stale';
+}
+
+// --- Parsing boundary: SSE payloads are validated, a malformed one is ignored ---
+const num = z.number().finite();
+const totalsSchema = z.object({
+  sold: num, held: num, available: num, revenueCents: num, scanned: num, oversold: num,
+  queue: z.object({ waiting: num, active: num }).nullable(),
+});
+const deltaSchema = z.object({
+  eventId: z.string(), tenantId: z.string(), tickets: num, revenueCents: num, scanned: num, at: z.string(),
+  seats: z.array(z.object({ idx: z.number().int(), sectionId: z.string() })),
+});
+const tickSchema = z.object({ totals: totalsSchema, at: z.string() });
+
+function parseWith<T>(schema: z.ZodType<T>, raw: unknown): T | null {
+  if (typeof raw !== 'string') return null;
+  try {
+    const r = schema.safeParse(JSON.parse(raw));
+    return r.success ? r.data : null;
+  } catch {
+    return null;
+  }
+}
+export const parseDelta = (raw: unknown): LiveDelta | null => parseWith(deltaSchema, raw);
+export const parseTick = (raw: unknown): LiveTick | null => parseWith(tickSchema, raw);
+
+/**
+ * A snapshot refetch can be older than the stream (it was read at time t, deltas after t were applied before it landed),
+ * so it MERGES instead of replacing: seats are unioned, sold/revenue/section figures never go down, minute buckets keep
+ * the larger count. The next tick still sets the other totals authoritatively. A snapshot of another event is ignored.
+ */
+export function applyLoad(state: LiveState | null, snapshot: LiveSnapshot, availability: { held: readonly number[]; sold: readonly number[] }): LiveState {
+  if (!state) return applySnapshot(snapshot, availability);
+  if (state.snapshot.event.id !== snapshot.event.id) return state;
+  const cur = state.snapshot;
+  const capacity = snapshot.capacity;
+  const soldIdx = new Set([...state.soldIdx, ...availability.sold]);
+  const heldIdx = new Set(availability.held.filter((i) => !soldIdx.has(i)));
+  const sold = Math.min(capacity, Math.max(cur.totals.sold, snapshot.totals.sold, soldIdx.size));
+  const revenueCents = Math.max(cur.totals.revenueCents, snapshot.totals.revenueCents);
+  const derived = {
+    sold: Math.max(state.derived.sold, snapshot.totals.sold, soldIdx.size),
+    revenueCents: Math.max(state.derived.revenueCents, snapshot.totals.revenueCents),
+  };
+  const known = new Map(cur.sections.map((x) => [x.id, x.sold]));
+  const buckets = new Map<string, MinuteBucket>();
+  for (const m of [...snapshot.byMinute, ...cur.byMinute]) {
+    const b = buckets.get(m.bucket);
+    buckets.set(m.bucket, b ? { bucket: m.bucket, tickets: Math.max(b.tickets, m.tickets), revenueCents: Math.max(b.revenueCents, m.revenueCents) } : { ...m });
+  }
+  const byMinute = [...buckets.values()].sort((a, b) => a.bucket.localeCompare(b.bucket)).slice(-MINUTES_KEPT);
+  // After a tick, its non-sold figures (held, queue, oversold) are fresher than the snapshot's.
+  const base = state.lastTickAt !== null ? cur.totals : snapshot.totals;
+  return {
+    ...state,
+    soldIdx,
+    heldIdx,
+    derived,
+    ahead: { sold: Math.max(0, sold - derived.sold), revenueCents: Math.max(0, revenueCents - derived.revenueCents) },
+    snapshot: {
+      ...snapshot,
+      sections: snapshot.sections.map((x) => ({ ...x, sold: Math.max(x.sold, known.get(x.id) ?? 0) })),
+      byMinute,
+      totals: { ...base, sold, revenueCents, available: Math.max(0, capacity - sold - base.held) },
+    },
+  };
 }
