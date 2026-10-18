@@ -7,6 +7,7 @@ import { errorHandler } from './errors';
 import { tenantRoutes } from './routes/tenants';
 import { eventRoutes } from './routes/events';
 import { holdRoutes } from './routes/holds';
+import { orderRoutes } from './routes/orders';
 import { publicRoutes } from './routes/public';
 import { queueRoutes } from './routes/queue';
 import { venueRoutes } from './routes/venues';
@@ -31,6 +32,7 @@ export type Deps = {
   secureCookies?: boolean;
   trustProxy?: boolean;
   redis?: Redis;
+  random?: () => number;
 };
 export type AuthUser = { id: string; email: string; name: string };
 export type Services = { availability: TtlCache<Availability>; waitingRoom?: WaitingRoom };
@@ -57,7 +59,8 @@ export function createApp(deps: Deps) {
     .route('/', eventRoutes())
     .route('/', publicRoutes())
     .route('/', queueRoutes(deps))
-    .route('/', holdRoutes(deps));
+    .route('/', holdRoutes(deps))
+    .route('/', orderRoutes(deps));
 }
 
 export type AppType = ReturnType<typeof createApp>;
