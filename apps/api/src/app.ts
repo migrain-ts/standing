@@ -5,6 +5,7 @@ import type { Clock, TenantRoleName } from '@standing/shared';
 import { authRoutes } from './auth/routes';
 import { errorHandler } from './errors';
 import { tenantRoutes } from './routes/tenants';
+import { doorRoutes } from './routes/door';
 import { eventRoutes } from './routes/events';
 import { holdRoutes } from './routes/holds';
 import { orderRoutes } from './routes/orders';
@@ -60,7 +61,8 @@ export function createApp(deps: Deps) {
     .route('/', publicRoutes())
     .route('/', queueRoutes(deps))
     .route('/', holdRoutes(deps))
-    .route('/', orderRoutes(deps));
+    .route('/', orderRoutes(deps))
+    .route('/', doorRoutes());
 }
 
 export type AppType = ReturnType<typeof createApp>;

@@ -37,7 +37,8 @@ export const AUTHED_ROUTES = new Set(['POST /auth/logout', 'GET /auth/me', 'GET 
   'POST /public/events/:eventId/queue', 'GET /public/events/:eventId/queue/:ticket']);
 /** Routes whose authorization is a row-level check inside the handler (own orders, door scan, ...). Later tasks add theirs. */
 export const SELF_CHECKED_ROUTES = new Set(['POST /public/events/:eventId/holds', 'GET /holds/:holdId', 'DELETE /holds/:holdId',
-  'POST /holds/:holdId/pay', 'GET /me/orders', 'GET /orders/:orderId']);
+  'POST /holds/:holdId/pay', 'GET /me/orders', 'GET /orders/:orderId',
+  'POST /door/scan', 'GET /door/events']);
 /** Routes open to everyone. */
 export const PUBLIC_ROUTES = new Set([
   'POST /auth/register', 'POST /auth/login', 'POST /auth/demo',

@@ -63,3 +63,6 @@ export const holdCreateSchema = z.object({
     .refine((ids) => new Set(ids.map((i) => i.toLowerCase())).size === ids.length, 'Duplicate seat'),
 });
 export type HoldCreateInput = z.infer<typeof holdCreateSchema>;
+
+export const scanSchema = z.object({ code: z.string().trim().min(1).max(200), eventId: uuid.optional() });
+export type ScanInput = z.infer<typeof scanSchema>;
