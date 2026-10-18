@@ -30,6 +30,8 @@ export const MATRIX: Row[] = [
   { method: 'PUT', pattern: '/tenants/:tenantId/events/:eventId/tiers', min: 'manager', url: (f) => `/tenants/${f.tenantId}/events/${f.draftEventId}/tiers`, body: (f) => [{ sectionId: f.sectionId, priceCents: 1000 }] },
   { method: 'POST', pattern: '/tenants/:tenantId/events/:eventId/publish', min: 'manager', url: (f) => `/tenants/${f.tenantId}/events/${f.draftEventId}/publish` },
   { method: 'POST', pattern: '/tenants/:tenantId/events/:eventId/close', min: 'manager', url: (f) => `/tenants/${f.tenantId}/events/${f.eventId}/close` },
+  { method: 'GET', pattern: '/tenants/:tenantId/events/:eventId/live/snapshot', min: 'manager', url: (f) => `/tenants/${f.tenantId}/events/${f.eventId}/live/snapshot` },
+  { method: 'GET', pattern: '/tenants/:tenantId/events/:eventId/live', min: 'manager', url: (f) => `/tenants/${f.tenantId}/events/${f.eventId}/live` },
 ];
 
 /** Routes that need a session but no tenant role. They must answer 401 anonymously. */
@@ -103,6 +105,7 @@ for (const row of MATRIX) {
         else {
           expect([401, 403]).not.toContain(res.status);
           expect(res.status).toBeLessThan(500);
+          await res.body?.cancel(); // SSE rows would otherwise keep streaming
         }
       });
     }

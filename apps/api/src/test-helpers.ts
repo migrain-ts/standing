@@ -3,7 +3,7 @@ import { createRedis } from '@standing/core';
 import { createTestDb, schema } from '@standing/db';
 import type { Redis } from 'ioredis';
 import { FakeClock } from '@standing/shared';
-import { createApp, type AppConfig, type Deps } from './app';
+import { createAppWithServices, type AppConfig, type AppOptions, type Deps } from './app';
 import { createSession } from './auth/sessions';
 
 export const testConfig: AppConfig = {
@@ -17,7 +17,7 @@ export const testConfig: AppConfig = {
 export type TestApp = Awaited<ReturnType<typeof makeApp>>;
 
 export async function makeApp(
-  opts: Partial<Pick<Deps, 'trustProxy' | 'redis'>> & { config?: Partial<AppConfig> } = {},
+  opts: Partial<Pick<Deps, 'trustProxy' | 'redis' | 'liveTickMs'>> & AppOptions & { liveSub?: boolean; config?: Partial<AppConfig> } = {},
 ) {
   const t = await createTestDb();
   const clock = new FakeClock(new Date('2026-01-05T08:00:00Z'));
@@ -28,9 +28,17 @@ export async function makeApp(
     appUrl: 'http://localhost:3200',
     ...(opts.trustProxy === undefined ? {} : { trustProxy: opts.trustProxy }),
     ...(opts.redis === undefined ? {} : { redis: opts.redis }),
+    ...(opts.redis && opts.liveSub ? { liveSub: opts.redis.duplicate() } : {}),
+    ...(opts.liveTickMs === undefined ? {} : { liveTickMs: opts.liveTickMs }),
   };
-  const app = createApp(deps);
-  return { app, deps, db: t.db, pool: t.pool, clock, close: t.close };
+  const { app, svc } = createAppWithServices(deps, opts);
+  return {
+    app, svc, deps, db: t.db, pool: t.pool, clock,
+    close: async () => {
+      await svc.liveBus.stop();
+      await t.close();
+    },
+  };
 }
 
 export function call(

@@ -11,8 +11,11 @@ import { holdRoutes } from './routes/holds';
 import { orderRoutes } from './routes/orders';
 import { publicRoutes } from './routes/public';
 import { queueRoutes } from './routes/queue';
+import { liveRoutes } from './routes/live';
 import { venueRoutes } from './routes/venues';
 import { availabilityLoader, type Availability } from './services/availability';
+import { LiveBus } from './services/live-bus';
+import { totalsLoader, type Totals } from './services/live';
 import { TtlCache } from './services/ttl-cache';
 import { WaitingRoom } from './services/waiting-room';
 
@@ -34,19 +37,39 @@ export type Deps = {
   trustProxy?: boolean;
   redis?: Redis;
   random?: () => number;
+  liveTickMs?: number;
+  /** Dedicated Redis connection for pattern subscribe (redis.duplicate()); without it the live bus never delivers. */
+  liveSub?: Redis;
 };
 export type AuthUser = { id: string; email: string; name: string };
-export type Services = { availability: TtlCache<Availability>; waitingRoom?: WaitingRoom };
+export type Services = {
+  availability: TtlCache<Availability>;
+  waitingRoom?: WaitingRoom;
+  liveBus: LiveBus;
+  totals: TtlCache<Totals>;
+};
+export type AppOptions = {
+  /** Test seam: wraps the totals loader (e.g. to count computations). */
+  wrapTotalsLoader?: (load: (eventId: string) => Promise<Totals>) => (eventId: string) => Promise<Totals>;
+};
 export type Env = {
   Variables: { user: AuthUser; deps: Deps; svc: Services; tenantId: string; tenantRole: TenantRoleName };
 };
 
-export function createApp(deps: Deps) {
+export function createApp(deps: Deps, opts: AppOptions = {}) {
+  return createAppWithServices(deps, opts).app;
+}
+
+export function createAppWithServices(deps: Deps, opts: AppOptions = {}) {
+  const wrap = opts.wrapTotalsLoader ?? ((l) => l);
+  const waitingRoom = deps.redis ? new WaitingRoom(deps.redis, deps.clock) : undefined;
   const svc: Services = {
     availability: new TtlCache(availabilityLoader(deps.db, deps.clock), deps.clock),
-    ...(deps.redis ? { waitingRoom: new WaitingRoom(deps.redis, deps.clock) } : {}),
+    ...(waitingRoom ? { waitingRoom } : {}),
+    liveBus: new LiveBus(deps.liveSub),
+    totals: new TtlCache(wrap(totalsLoader(deps, waitingRoom)), deps.clock, 1000),
   };
-  return new Hono<Env>()
+  const app = new Hono<Env>()
     .use('*', async (c, next) => {
       c.set('deps', deps);
       c.set('svc', svc);
@@ -62,7 +85,9 @@ export function createApp(deps: Deps) {
     .route('/', queueRoutes(deps))
     .route('/', holdRoutes(deps))
     .route('/', orderRoutes(deps))
-    .route('/', doorRoutes());
+    .route('/', doorRoutes())
+    .route('/', liveRoutes());
+  return { app, svc };
 }
 
 export type AppType = ReturnType<typeof createApp>;
