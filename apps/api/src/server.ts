@@ -11,7 +11,6 @@ const { db } = createDb(url);
 await runMigrations(db);
 const config = loadConfig();
 if (process.env.SEED_DEMO === '1') {
-  // @ts-expect-error seed arrives in Task 17
   const { seedDemo } = await import('./seed');
   console.log('[api] demo seed', await seedDemo(db, new SystemClock()));
 }
