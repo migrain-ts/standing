@@ -44,6 +44,9 @@ describe('payHold', () => {
     expect(payload.at).toBe(t.clock.now().toISOString());
     expect(Object.keys(payload.seats[0] ?? {}).sort()).toEqual(['idx', 'priceCents', 'seatId', 'sectionId']);
     expect(await count(sql`select count(*)::int as n from documents where order_id = ${res.order.id}::uuid and kind = 'ticket_pdf' and status = 'queued'`)).toBe(1);
+    const doc = await t.db.execute(sql`select created_at, updated_at from documents where order_id = ${res.order.id}::uuid`);
+    expect(new Date(doc.rows[0]?.created_at as Date).toISOString()).toBe(t.clock.now().toISOString());
+    expect(new Date(doc.rows[0]?.updated_at as Date).toISOString()).toBe(t.clock.now().toISOString());
   });
 
   it('is idempotent: the same key returns the same order and creates nothing twice, even in parallel', async () => {

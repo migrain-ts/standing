@@ -98,7 +98,7 @@ export async function payHold(
     if (seats.rows.length !== hold.seat_count) throw expired();
 
     if (willFail) {
-      await tx.insert(schema.payments).values({ holdId, idempotencyKey: o.idempotencyKey, status: 'failed' });
+      await tx.insert(schema.payments).values({ holdId, idempotencyKey: o.idempotencyKey, status: 'failed', createdAt: now });
       return { kind: 'declined' };
     }
     const totalRow = await tx.execute(sql`
@@ -129,7 +129,7 @@ export async function payHold(
       returning seat_id`);
     if (sold.rows.length !== hold.seat_count) throw expired(); // throwing rolls the whole transaction back
     await tx.update(schema.holds).set({ status: 'paid' }).where(eq(schema.holds.id, holdId));
-    await tx.insert(schema.payments).values({ holdId, idempotencyKey: o.idempotencyKey, status: 'succeeded', orderId: order.id });
+    await tx.insert(schema.payments).values({ holdId, idempotencyKey: o.idempotencyKey, status: 'succeeded', orderId: order.id, createdAt: now });
     const items = await tx.execute(sql`
       select oi.seat_id, s.idx, oi.section_id, oi.price_cents
       from order_items oi join seats s on s.id = oi.seat_id
@@ -158,6 +158,8 @@ export async function payHold(
       orderId: order.id,
       eventId: hold.event_id,
       requestedBy: o.buyerId,
+      createdAt: now,
+      updatedAt: now,
     });
     return { kind: 'paid', replayed: false, order: await loadOrderView(tx, deps.config.ticketSecret, order.id) };
   });

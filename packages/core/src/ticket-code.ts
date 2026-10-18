@@ -23,6 +23,8 @@ export function verifyTicket(secret: string, code: string): TicketId | null {
   const id = dashed(hex);
   const given = Buffer.from(sig, 'base64url');
   const expected = mac(secret, id);
+  // Canonical encoding only: the last base64url char carries padding bits that Buffer ignores.
+  if (given.toString('base64url') !== sig) return null;
   if (given.length !== expected.length || !timingSafeEqual(given, expected)) return null;
   return asId<'TicketId'>(id);
 }

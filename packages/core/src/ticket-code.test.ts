@@ -15,7 +15,11 @@ describe('ticket codes', () => {
     const code = signTicket('s3cret', id);
     expect(verifyTicket('other', code)).toBeNull();
     expect(verifyTicket('s3cret', code.replace('3f2b', '3f2c'))).toBeNull();
-    expect(verifyTicket('s3cret', code.slice(0, -1) + (code.endsWith('A') ? 'B' : 'A'))).toBeNull();
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+    for (const c of alphabet) {
+      if (c === code.slice(-1)) continue;
+      expect(verifyTicket('s3cret', code.slice(0, -1) + c), c).toBeNull();
+    }
     for (const bad of ['', 'STD1', 'STD1.x.y', 'STD2.' + code.slice(5), code + 'x', code.slice(0, 20), '\u0000']) {
       expect(verifyTicket('s3cret', bad), bad).toBeNull();
     }
