@@ -1,8 +1,8 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 
-type Detected = { rawValue: string };
-type Detector = { detect(source: CanvasImageSource): Promise<Detected[]> };
+export type Detected = { rawValue: string };
+export type Detector = { detect(source: CanvasImageSource): Promise<Detected[]> };
 type DetectorCtor = new (opts: { formats: string[] }) => Detector;
 
 export const REPEAT_WINDOW_MS = 2000;
@@ -20,86 +20,147 @@ export function createRepeatGuard(windowMs = REPEAT_WINDOW_MS) {
   };
 }
 
-export type BarcodeScanner = {
-  /** 'checking' until the browser has been probed once. */
-  status: 'checking' | 'supported' | 'unsupported';
-  supported: boolean;
-  stream: MediaStream | null;
+export type ScannerStatus = 'checking' | 'supported' | 'unsupported' | 'denied';
+
+export type BarcodeScanner = { status: ScannerStatus; supported: boolean; stream: MediaStream | null };
+
+/** The hidden element the detector reads frames from. */
+export type FrameSource = { source: CanvasImageSource; play(): Promise<void>; isReady(): boolean; release(): void };
+
+export type ScannerDeps = {
+  createDetector: () => Detector | null;
+  getUserMedia: (() => Promise<MediaStream>) | null;
+  createFrameSource: (stream: MediaStream) => FrameSource;
+  setInterval: (fn: () => void, ms: number) => unknown;
+  clearInterval: (handle: unknown) => void;
+  now: () => number;
+  onCode: (code: string) => void;
 };
 
-function detectorCtor(): DetectorCtor | null {
+export type StartResult =
+  | { status: 'supported'; stream: MediaStream; stop: () => void }
+  | { status: 'unsupported' | 'denied' };
+
+const isDenied = (e: unknown): boolean =>
+  typeof e === 'object' && e !== null && 'name' in e && (e.name === 'NotAllowedError' || e.name === 'SecurityError');
+
+/**
+ * Opens the camera and starts polling the detector. `isCancelled` is re-checked after every await so an unmount
+ * while the camera opens or the video starts never leaves a running interval or a live track behind. Any failure
+ * stops every track before reporting; nothing throws.
+ */
+export async function startScanner(deps: ScannerDeps, isCancelled: () => boolean): Promise<StartResult> {
+  let tracks: MediaStreamTrack[] = [];
+  let frames: FrameSource | null = null;
+  let timer: unknown;
+  let timerStarted = false;
+  const stop = () => {
+    if (timerStarted) deps.clearInterval(timer);
+    timerStarted = false;
+    tracks.forEach((t) => t.stop());
+    tracks = [];
+    frames?.release();
+    frames = null;
+  };
   try {
-    const ctor: unknown = Reflect.get(globalThis, 'BarcodeDetector');
-    return typeof ctor === 'function' ? (ctor as DetectorCtor) : null;
-  } catch {
-    return null;
+    const detector = deps.createDetector();
+    if (!detector || !deps.getUserMedia) return { status: 'unsupported' };
+    const stream = await deps.getUserMedia();
+    tracks = stream.getTracks();
+    if (isCancelled()) {
+      stop();
+      return { status: 'unsupported' };
+    }
+    frames = deps.createFrameSource(stream);
+    await frames.play();
+    if (isCancelled()) {
+      stop();
+      return { status: 'unsupported' };
+    }
+    const accept = createRepeatGuard();
+    const source = frames;
+    let busy = false;
+    timer = deps.setInterval(() => {
+      if (busy || isCancelled() || !source.isReady()) return;
+      busy = true;
+      detector
+        .detect(source.source)
+        .then((found) => {
+          const code = found[0]?.rawValue;
+          if (code && !isCancelled() && accept(code, deps.now())) deps.onCode(code);
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          busy = false;
+        });
+    }, POLL_MS);
+    timerStarted = true;
+    return { status: 'supported', stream, stop };
+  } catch (e) {
+    stop();
+    return { status: isDenied(e) ? 'denied' : 'unsupported' };
   }
 }
 
-/**
- * Camera QR scanning where BarcodeDetector and getUserMedia both exist. Anything else (or a denied camera)
- * reports unsupported; nothing here throws into the page.
- */
+function browserDeps(onCode: (code: string) => void): ScannerDeps {
+  return {
+    createDetector: () => {
+      try {
+        const ctor: unknown = Reflect.get(globalThis, 'BarcodeDetector');
+        // Feature-detected above: the only construction signature BarcodeDetector has is { formats }.
+        return typeof ctor === 'function' ? new (ctor as DetectorCtor)({ formats: ['qr_code'] }) : null;
+      } catch {
+        return null;
+      }
+    },
+    getUserMedia:
+      typeof navigator !== 'undefined' && navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function'
+        ? () => navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+        : null,
+    createFrameSource: (stream) => {
+      const video = document.createElement('video');
+      video.muted = true;
+      video.playsInline = true;
+      video.srcObject = stream;
+      return {
+        source: video,
+        play: () => video.play(),
+        isReady: () => video.readyState >= 2,
+        release: () => {
+          video.srcObject = null;
+        },
+      };
+    },
+    setInterval: (fn, ms) => setInterval(fn, ms),
+    clearInterval: (h) => clearInterval(h as ReturnType<typeof setInterval>),
+    now: () => Date.now(),
+    onCode,
+  };
+}
+
+/** Camera QR scanning where BarcodeDetector and getUserMedia both exist; otherwise reports unsupported or denied. */
 export function useBarcodeScanner(onCode: (code: string) => void): BarcodeScanner {
-  const [state, setState] = useState<{ status: BarcodeScanner['status']; stream: MediaStream | null }>({
-    status: 'checking',
-    stream: null,
-  });
+  const [state, setState] = useState<{ status: ScannerStatus; stream: MediaStream | null }>({ status: 'checking', stream: null });
   const cb = useRef(onCode);
-  cb.current = onCode;
+  useEffect(() => {
+    cb.current = onCode;
+  });
 
   useEffect(() => {
     let cancelled = false;
-    let timer: ReturnType<typeof setInterval> | undefined;
-    let tracks: MediaStreamTrack[] = [];
-    const unsupported = () => {
-      if (!cancelled) setState({ status: 'unsupported', stream: null });
-    };
-    const start = async () => {
-      try {
-        const Ctor = detectorCtor();
-        if (!Ctor || !navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
-          unsupported();
-          return;
+    let stop: (() => void) | undefined;
+    void startScanner(browserDeps((c) => cb.current(c)), () => cancelled).then((res) => {
+      if (res.status === 'supported') {
+        if (cancelled) res.stop();
+        else {
+          stop = res.stop;
+          setState({ status: 'supported', stream: res.stream });
         }
-        const detector = new Ctor({ formats: ['qr_code'] });
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-        tracks = stream.getTracks();
-        if (cancelled) {
-          tracks.forEach((t) => t.stop());
-          return;
-        }
-        const video = document.createElement('video');
-        video.muted = true;
-        video.playsInline = true;
-        video.srcObject = stream;
-        await video.play();
-        const accept = createRepeatGuard();
-        let busy = false;
-        timer = setInterval(() => {
-          if (busy || video.readyState < 2) return;
-          busy = true;
-          detector
-            .detect(video)
-            .then((found) => {
-              const code = found[0]?.rawValue;
-              if (code && accept(code, Date.now())) cb.current(code);
-            })
-            .catch(() => undefined)
-            .finally(() => {
-              busy = false;
-            });
-        }, POLL_MS);
-        if (!cancelled) setState({ status: 'supported', stream });
-      } catch {
-        unsupported();
-      }
-    };
-    void start();
+      } else if (!cancelled) setState({ status: res.status, stream: null });
+    });
     return () => {
       cancelled = true;
-      if (timer) clearInterval(timer);
-      tracks.forEach((t) => t.stop());
+      stop?.();
     };
   }, []);
 

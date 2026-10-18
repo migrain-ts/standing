@@ -1,15 +1,16 @@
 'use client';
 import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { use, useCallback, useRef, useState } from 'react';
+import { use, useCallback, useEffect, useRef, useState } from 'react';
 import { CameraScanner } from '@/components/CameraScanner';
 import { ManualEntry } from '@/components/ManualEntry';
 import { QueryError } from '@/components/QueryError';
-import { ScanResultPanel, TONE_CLASSES, ToneIcon } from '@/components/ScanResultPanel';
+import { ScanResultPanel, TONE, ToneIcon } from '@/components/ScanResultPanel';
 import { Progress } from '@/components/ui/progress';
 import { H1 } from '@/components/ui/typography';
 import { api, ApiClientError } from '@/lib/api';
 import { DOOR_EVENTS_KEY, HISTORY_LIMIT, scannedPercent, useDoorEvents } from '@/lib/door';
+import { createScanQueue } from '@/lib/scanQueue';
 import { formatClock, describeScan, type ScanResult, type ScanView } from '@/lib/scanResult';
 import { useBarcodeScanner } from '@/lib/useBarcodeScanner';
 import { cn } from '@/lib/utils';
@@ -45,7 +46,16 @@ export default function DoorScanPage({ params }: { params: Promise<{ eventId: st
     [eventId, qc],
   );
 
-  const camera = useBarcodeScanner(scan);
+  // Scans run strictly one at a time, in submission order (wedge scanners, camera repeats).
+  const scanRef = useRef(scan);
+  useEffect(() => {
+    scanRef.current = scan;
+  });
+  const queueRef = useRef<((code: string) => void) | null>(null);
+  if (queueRef.current === null) queueRef.current = createScanQueue((c) => scanRef.current(c));
+  const submit = useCallback((code: string) => queueRef.current?.(code), []);
+
+  const camera = useBarcodeScanner(submit);
 
   return (
     <div className="space-y-4">
@@ -61,13 +71,17 @@ export default function DoorScanPage({ params }: { params: Promise<{ eventId: st
 
       <ScanResultPanel view={view} />
 
-      <ManualEntry ref={inputRef} onSubmit={(c) => void scan(c)} />
+      <ManualEntry ref={inputRef} onSubmit={submit} />
 
       {camera.supported && camera.stream ? (
         <CameraScanner stream={camera.stream} />
       ) : (
-        camera.status === 'unsupported' && (
-          <p className="text-sm text-muted-foreground">Camera scanning is not available in this browser, use the field below</p>
+        (camera.status === 'unsupported' || camera.status === 'denied') && (
+          <p className="text-sm text-muted-foreground">
+            {camera.status === 'denied'
+              ? 'Camera access was denied, use the field below'
+              : 'Camera scanning is not available in this browser, use the field below'}
+          </p>
         )
       )}
 
@@ -89,7 +103,7 @@ export default function DoorScanPage({ params }: { params: Promise<{ eventId: st
           <ol className="space-y-2">
             {history.map((h) => (
               <li key={h.n} className="flex items-center gap-3 rounded-lg border border-border p-2">
-                <ToneIcon tone={h.view.tone} className={cn('size-9 border-0', TONE_CLASSES[h.view.tone])} />
+                <ToneIcon tone={h.view.tone} className={cn('size-9 border-0', TONE[h.view.tone])} />
                 <div className="min-w-0 flex-1">
                   <p className="font-medium leading-tight">{h.view.title}</p>
                   <p className="truncate text-sm text-muted-foreground">{h.view.detail}</p>

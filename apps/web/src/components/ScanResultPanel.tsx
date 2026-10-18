@@ -2,7 +2,7 @@ import { AddLineIcon, CheckLineIcon, ScanLineIcon } from '@/components/icons';
 import type { ScanTone, ScanView } from '@/lib/scanResult';
 import { cn } from '@/lib/utils';
 
-const TONE: Record<ScanTone, string> = {
+export const TONE: Record<ScanTone, string> = {
   success: 'bg-success text-success-foreground',
   warning: 'bg-warning text-warning-foreground',
   info: 'bg-info text-info-foreground',
@@ -46,5 +46,3 @@ export function ScanResultPanel({ view }: { view: ScanView | null }) {
     </div>
   );
 }
-
-export const TONE_CLASSES = TONE;
