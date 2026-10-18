@@ -12,3 +12,4 @@ export { DownLineIcon } from "./down-line";
 export { CheckLineIcon } from "./check-line";
 export { DownloadLineIcon } from "./download-line";
 export { ExitLineIcon } from "./exit-line";
+export { MenuLineIcon } from "./menu-line";

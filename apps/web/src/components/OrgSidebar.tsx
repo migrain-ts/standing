@@ -1,12 +1,16 @@
 'use client';
 import Link from 'next/link';
-import { useParams, usePathname, useRouter } from 'next/navigation';
+import { useParams, usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { TenantSwitcher } from '@/components/TenantSwitcher';
 import { UserMenu } from '@/components/UserMenu';
-import { Building2LineIcon, CalendarLineIcon, DashboardLineIcon, DownLineIcon, GroupLineIcon, TicketLineIcon } from '@/components/icons';
+import { Building2LineIcon, CalendarLineIcon, DashboardLineIcon, GroupLineIcon, MenuLineIcon, TicketLineIcon } from '@/components/icons';
 import { Button } from '@/components/ui/button';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarHeader, SidebarItem } from '@/components/ui/sidebar';
+import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarHeader } from '@/components/ui/sidebar';
 import { useMe } from '@/lib/auth';
+import { cn } from '@/lib/utils';
+import { trapTab } from '@/lib/focusTrap';
 
 const SECTIONS = [
   { label: 'Overview', path: '', icon: <DashboardLineIcon /> },
@@ -15,46 +19,84 @@ const SECTIONS = [
   { label: 'Members', path: '/members', icon: <GroupLineIcon /> },
 ];
 
-/** Organizer console shell. Routes are /org/<tenantId>/<section>; /org picks the first organizer tenant. */
-export function OrgSidebar() {
+/** The installed SidebarItem is a <button> and cannot be an anchor, so this link carries its exact classes. */
+function SidebarLink({ href, label, icon, active, onClick }: { href: string; label: string; icon: React.ReactNode; active: boolean; onClick?: () => void }) {
+  return (
+    <Link
+      href={href}
+      onClick={onClick}
+      aria-current={active ? 'page' : undefined}
+      className={cn(
+        'flex min-h-11 w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors md:min-h-0',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
+      )}
+    >
+      <span className="shrink-0 [&>svg]:size-4">{icon}</span>
+      <span className="truncate">{label}</span>
+    </Link>
+  );
+}
+
+function SidebarBody({ onNavigate, inSheet = false }: { onNavigate?: () => void; inSheet?: boolean }) {
   const me = useMe().data ?? null;
-  const router = useRouter();
   const pathname = usePathname();
   const { tenantId } = useParams<{ tenantId?: string }>();
   const tenants = (me?.tenants ?? []).filter((t) => t.role !== 'door');
-  const active = tenants.find((t) => t.id === tenantId) ?? tenants[0];
+  const active = tenants.find((t) => t.id === tenantId) ?? null;
   const base = active ? `/org/${active.id}` : '/org';
-
+  const suffix = SECTIONS.find((s) => s.path && pathname.startsWith(`${base}${s.path}`))?.path ?? '';
   return (
-    <Sidebar className="sticky top-0 h-dvh">
-      <SidebarHeader className="gap-2">
-        <Link href="/" aria-label="Standing storefront">
+    <>
+      <SidebarHeader className={cn('gap-2', inSheet && 'pr-14')}>
+        <Link href="/" aria-label="Standing storefront" className="flex size-11 shrink-0 items-center justify-center md:size-auto">
           <TicketLineIcon className="size-5 text-primary" aria-hidden />
         </Link>
-        <DropdownMenu>
-          <DropdownMenuTrigger render={<Button variant="ghost" size="sm" className="min-w-0 flex-1 justify-between" aria-label="Switch organization" />}>
-            <span className="truncate">{active?.name ?? 'No organization'}</span>
-            <DownLineIcon className="size-4 shrink-0" aria-hidden />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            {tenants.map((t) => (
-              <DropdownMenuItem key={t.id} onClick={() => router.push(`/org/${t.id}`)}>
-                {t.name}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <TenantSwitcher tenants={tenants} activeId={active?.id ?? null} suffix={suffix} onNavigate={onNavigate} />
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          {SECTIONS.map((s) => {
-            const href = `${base}${s.path}`;
-            const isActive = s.path === '' ? pathname === href : pathname.startsWith(href);
-            return <SidebarItem key={s.label} label={s.label} icon={s.icon} active={isActive} aria-current={isActive ? 'page' : undefined} onClick={() => router.push(href)} />;
-          })}
+          <nav aria-label="Organizer" className="flex flex-col gap-0.5">
+            {SECTIONS.map((s) => {
+              const href = `${base}${s.path}`;
+              const isActive = active != null && (s.path === '' ? pathname === href : pathname.startsWith(href));
+              return <SidebarLink key={s.label} href={href} label={s.label} icon={s.icon} active={isActive} onClick={onNavigate} />;
+            })}
+          </nav>
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>{me && <UserMenu user={me.user} />}</SidebarFooter>
-    </Sidebar>
+    </>
+  );
+}
+
+/** Organizer console navigation: a fixed sidebar from md up, a compact header with a Sheet below. */
+export function OrgSidebar() {
+  const [open, setOpen] = useState(false);
+  const pathname = usePathname();
+  // Navigating (including via browser history) always closes the mobile menu.
+  useEffect(() => setOpen(false), [pathname]);
+  return (
+    <>
+      <Sidebar className="sticky top-0 hidden h-dvh shrink-0 md:flex" aria-label="Organizer navigation">
+        <SidebarBody />
+      </Sidebar>
+      <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-background px-4 md:hidden">
+        <Sheet open={open} onOpenChange={setOpen}>
+          <SheetTrigger render={<Button variant="ghost" size="icon" className="size-11" aria-label="Open menu" />}>
+            <MenuLineIcon className="size-5" aria-hidden />
+          </SheetTrigger>
+          <SheetContent onKeyDown={trapTab} side="left" className="flex w-72 flex-col p-0">
+            <SheetTitle className="sr-only">Organizer menu</SheetTitle>
+            <SheetDescription className="sr-only">Switch organization or open a section.</SheetDescription>
+            <Sidebar className="w-full border-r-0">
+              <SidebarBody inSheet onNavigate={() => setOpen(false)} />
+            </Sidebar>
+          </SheetContent>
+        </Sheet>
+        <TicketLineIcon className="size-5 text-primary" aria-hidden />
+        <span className="font-medium">Standing</span>
+      </header>
+    </>
   );
 }
