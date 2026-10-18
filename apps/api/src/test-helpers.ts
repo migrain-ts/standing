@@ -12,6 +12,7 @@ export const testConfig: AppConfig = {
   paymentFailureRate: 0,
   ticketSecret: 'test-ticket-secret',
   demoLogin: false,
+  simulatorApiUrl: 'http://localhost:4100',
 };
 
 export type TestApp = Awaited<ReturnType<typeof makeApp>>;

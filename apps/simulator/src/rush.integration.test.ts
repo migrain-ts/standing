@@ -1,0 +1,86 @@
+import { serve } from '@hono/node-server';
+import type { AddressInfo } from 'node:net';
+import { and, count, eq, sql } from 'drizzle-orm';
+import { insertEventFixture, rebuildRollups, schema, type Db } from '@standing/db';
+import { projectOutbox } from '@standing/worker';
+import { connectTestRedis, makeApp, type TestApp } from '@standing/api/src/test-helpers';
+import { oversold } from '@standing/api/src/services/live';
+import type { Redis } from 'ioredis';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { startRush } from './run';
+
+let redis: Redis;
+const servers: ReturnType<typeof serve>[] = [];
+const apps: TestApp[] = [];
+
+async function serveApp(t: TestApp): Promise<string> {
+  apps.push(t);
+  const server = serve({ fetch: t.app.fetch, port: 0, hostname: '127.0.0.1' });
+  servers.push(server);
+  await new Promise<void>((resolve) => server.once('listening', () => resolve()));
+  return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+}
+
+beforeAll(async () => {
+  redis = await connectTestRedis();
+});
+afterAll(async () => {
+  await new Promise((r) => setTimeout(r, 500)); // handlers of aborted requests may still be finishing
+  for (const s of servers) await new Promise<void>((resolve) => s.close(() => resolve()));
+  for (const t of apps) await t.close();
+  redis.disconnect();
+});
+
+const sections = async (db: Db, eventId: string) =>
+  (await db.execute(sql`select section_id, tickets, revenue_cents from sales_by_section where event_id = ${eventId}::uuid order by section_id`)).rows.map(
+    (r) => [r.section_id, Number(r.tickets), Number(r.revenue_cents)],
+  );
+
+async function drainOutbox(t: TestApp): Promise<void> {
+  for (let processed = 1; processed > 0; ) processed = (await projectOutbox(t.db, { clock: t.clock })).processed;
+}
+
+async function expectConsistent(t: TestApp, eventId: string, paid: number): Promise<number> {
+  await drainOutbox(t);
+  expect(await oversold(t.db, eventId)).toBe(0);
+  const [sold] = await t.db.select({ n: count() }).from(schema.eventSeats).where(and(eq(schema.eventSeats.eventId, eventId), eq(schema.eventSeats.status, 'sold')));
+  const [orders] = await t.db.select({ n: count() }).from(schema.orders).where(eq(schema.orders.eventId, eventId));
+  const tickets = await t.db.execute(sql`select count(*)::int as n from tickets where order_id in (select id from orders where event_id = ${eventId}::uuid)`);
+  expect(tickets.rows[0]?.n).toBe(sold?.n);
+  expect(orders?.n).toBe(paid);
+  const projected = await sections(t.db, eventId);
+  await rebuildRollups(t.db, eventId);
+  expect(await sections(t.db, eventId)).toEqual(projected);
+  expect(sold?.n).toBeLessThanOrEqual(400);
+  return sold?.n ?? 0;
+}
+
+describe('rush integration', () => {
+  it('survives a Redis flush in the middle of a Rush: no oversell, no lost sale, rollups equal the raw recompute', async () => {
+    const t = await makeApp({ redis, config: { paymentLatencyMs: 0, paymentFailureRate: 0.05 } });
+    const apiUrl = await serveApp(t);
+    const fx = await insertEventFixture(t.db, { rows: 20, seatsPerRow: 20 }); // 400 seats, default admissionLimit 200
+    const rush = startRush({ apiUrl, db: t.db }, { eventId: fx.eventId, buyers: 1500, maxSeatsPerBuyer: 3, durationSeconds: 6 });
+    await new Promise((r) => setTimeout(r, 2000));
+    await redis.flushdb(); // queue, admissions, rate limits and BullMQ keys vanish
+    const stats = await rush.done;
+    expect(stats.status).toBe('finished');
+    const c = stats.counters;
+    const sold = await expectConsistent(t, fx.eventId, c.paid);
+    expect(sold === 400 || c.paid + c.expired + c.abandoned + c.soldOut + c.errors === c.started).toBe(true);
+    expect(c.started).toBe(1500);
+    expect(c.errors / c.started).toBeLessThan(0.05);
+  }, 180_000);
+
+  it('keeps selling when Redis is unreachable for the whole run (fail open)', async () => {
+    const broken = new Proxy({}, { get: (_t, prop) => (prop === 'then' ? undefined : async () => { throw new Error('redis down'); }) }) as unknown as Redis;
+    const t = await makeApp({ redis: broken, noDocumentQueue: true, config: { paymentLatencyMs: 0, paymentFailureRate: 0.05 } });
+    const apiUrl = await serveApp(t);
+    const fx = await insertEventFixture(t.db, { rows: 10, seatsPerRow: 10 });
+    const stats = await startRush({ apiUrl, db: t.db }, { eventId: fx.eventId, buyers: 300, maxSeatsPerBuyer: 2, durationSeconds: 3 }).done;
+    expect(stats.status).toBe('finished');
+    expect(stats.counters.paid).toBeGreaterThan(0);
+    expect(stats.counters.errors / stats.counters.started).toBeLessThan(0.05);
+    await expectConsistent(t, fx.eventId, stats.counters.paid);
+  }, 180_000);
+});

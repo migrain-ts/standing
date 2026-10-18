@@ -43,5 +43,14 @@ export function queueRoutes(deps: { redis?: Redis | undefined; clock: Clock }) {
       } catch {
         return c.json(DEGRADED);
       }
+    })
+    .delete('/public/events/:eventId/queue/:ticket', requireAuth, async (c) => {
+      // Frees the caller's admission slot; idempotent, and a Redis failure is not the buyer's problem.
+      try {
+        await c.get('svc').waitingRoom?.release(c.req.param('eventId'), c.req.param('ticket'));
+      } catch {
+        // the slot lapses on its own after the active TTL
+      }
+      return c.body(null, 204);
     });
 }

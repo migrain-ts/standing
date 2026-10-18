@@ -82,51 +82,70 @@ async function freeSeats(ctx: BuyerCtx): Promise<number[] | null> {
   return free;
 }
 
+/** Frees the admission slot. Not tied to the run's abort signal, so a stopped run releases too; failures are swallowed. */
+async function releaseAdmission(ctx: BuyerCtx, ticket: string): Promise<void> {
+  try {
+    await ctx.client.del(`/public/events/${ctx.eventId}/queue/${encodeURIComponent(ticket)}`);
+  } catch {
+    // the slot lapses on its own after the active TTL
+  }
+}
+
 export async function runBuyer(ctx: BuyerCtx): Promise<Outcome> {
   const { client, eventId, rng, stats, signal } = ctx;
-  let ticket = await enterQueue(ctx);
-  if (ticket === null) return 'error';
+  let ticket: string | null = null;
+  let paid = false;
+  // An admission slot is only freed by a payment; every other ending must free it, or abandoners stall the queue.
+  try {
+    ticket = await enterQueue(ctx);
+    if (ticket === null) return 'error';
 
-  let holdId: string | null = null;
-  for (let attempt = 0; attempt < MAX_HOLD_ATTEMPTS && holdId === null; attempt++) {
-    const free = await freeSeats(ctx);
-    if (free === null) return 'error';
-    const wanted = 1 + Math.floor(rng() * ctx.maxSeatsPerBuyer);
-    let run: number[] | null = null;
-    for (let k = wanted; k >= 1 && run === null; k--) run = pickRun(free, k, rng);
-    if (run === null) return 'soldOut';
-    const seatIds = run.map((idx) => ctx.seatIds[idx]);
-    const res = await client.post(`/public/events/${eventId}/holds`, { seatIds }, { 'x-queue-ticket': ticket }, signal);
-    stats.recordHold(res.ms);
-    const parsed = holdBody.safeParse(res.body);
-    if (res.status === 201 && parsed.success) {
-      stats.inc('holdsOk');
-      holdId = parsed.data.hold.id;
-    } else if (res.status === 409) {
-      stats.inc('holdsConflict');
-    } else if (res.status === 403 && errorBody.safeParse(res.body).data?.error.code === 'queue_required') {
-      const next = await enterQueue(ctx);
-      if (next === null) return 'error';
-      ticket = next;
-    } else {
+    let holdId: string | null = null;
+    for (let attempt = 0; attempt < MAX_HOLD_ATTEMPTS && holdId === null; attempt++) {
+      const free = await freeSeats(ctx);
+      if (free === null) return 'error';
+      const wanted = 1 + Math.floor(rng() * ctx.maxSeatsPerBuyer);
+      let run: number[] | null = null;
+      for (let k = wanted; k >= 1 && run === null; k--) run = pickRun(free, k, rng);
+      if (run === null) return 'soldOut';
+      const seatIds = run.map((idx) => ctx.seatIds[idx]);
+      const res = await client.post(`/public/events/${eventId}/holds`, { seatIds }, { 'x-queue-ticket': ticket }, signal);
+      stats.recordHold(res.ms);
+      const parsed = holdBody.safeParse(res.body);
+      if (res.status === 201 && parsed.success) {
+        stats.inc('holdsOk');
+        holdId = parsed.data.hold.id;
+      } else if (res.status === 409) {
+        stats.inc('holdsConflict');
+      } else if (res.status === 403 && errorBody.safeParse(res.body).data?.error.code === 'queue_required') {
+        const next = await enterQueue(ctx);
+        if (next === null) return 'error';
+        ticket = next;
+      } else {
+        return 'error';
+      }
+    }
+    if (holdId === null) return 'soldOut'; // the seats kept going to other buyers
+
+    if (rng() < ctx.abandonRate) return 'abandoned'; // the hold expires on its own
+    await sleep(between(rng, ctx.thinkMs[0], ctx.thinkMs[1]), signal);
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const res = await client.post(`/holds/${holdId}/pay`, undefined, { 'idempotency-key': randomUUID(), 'x-queue-ticket': ticket }, signal);
+      stats.recordPay(res.ms);
+      if (res.status === 201) {
+        paid = true; // the pay call released the admission through its X-Queue-Ticket header
+        return 'paid';
+      }
+      if (res.status === 410) return 'expired';
+      if (res.status === 402) {
+        stats.inc('declined');
+        continue;
+      }
       return 'error';
     }
+    return 'abandoned'; // declined twice: the buyer gives up and the hold lapses
+  } finally {
+    if (!paid && ticket !== null && ticket !== 'open') await releaseAdmission(ctx, ticket);
   }
-  if (holdId === null) return 'soldOut'; // the seats kept going to other buyers
-
-  if (rng() < ctx.abandonRate) return 'abandoned'; // the hold expires on its own
-  await sleep(between(rng, ctx.thinkMs[0], ctx.thinkMs[1]), signal);
-
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const res = await client.post(`/holds/${holdId}/pay`, undefined, { 'idempotency-key': randomUUID(), 'x-queue-ticket': ticket }, signal);
-    stats.recordPay(res.ms);
-    if (res.status === 201) return 'paid';
-    if (res.status === 410) return 'expired';
-    if (res.status === 402) {
-      stats.inc('declined');
-      continue;
-    }
-    return 'error';
-  }
-  return 'abandoned'; // declined twice: the buyer gives up and the hold lapses
 }

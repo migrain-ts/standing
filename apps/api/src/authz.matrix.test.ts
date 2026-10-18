@@ -36,11 +36,14 @@ export const MATRIX: Row[] = [
   { method: 'GET', pattern: '/tenants/:tenantId/exports/sales.csv', min: 'manager', url: (f) => `/tenants/${f.tenantId}/exports/sales.csv` },
   { method: 'GET', pattern: '/tenants/:tenantId/exports/sales.xlsx', min: 'manager', url: (f) => `/tenants/${f.tenantId}/exports/sales.xlsx` },
   { method: 'GET', pattern: '/tenants/:tenantId/overview', min: 'manager', url: (f) => `/tenants/${f.tenantId}/overview` },
+  { method: 'POST', pattern: '/tenants/:tenantId/events/:eventId/rush', min: 'manager', url: (f) => `/tenants/${f.tenantId}/events/${f.eventId}/rush`, body: { buyers: 10 } },
+  { method: 'GET', pattern: '/tenants/:tenantId/events/:eventId/rush', min: 'manager', url: (f) => `/tenants/${f.tenantId}/events/${f.eventId}/rush` },
+  { method: 'DELETE', pattern: '/tenants/:tenantId/events/:eventId/rush', min: 'manager', url: (f) => `/tenants/${f.tenantId}/events/${f.eventId}/rush` },
 ];
 
 /** Routes that need a session but no tenant role. They must answer 401 anonymously. */
 export const AUTHED_ROUTES = new Set(['POST /auth/logout', 'GET /auth/me', 'GET /tenants', 'POST /tenants',
-  'POST /public/events/:eventId/queue', 'GET /public/events/:eventId/queue/:ticket']);
+  'POST /public/events/:eventId/queue', 'GET /public/events/:eventId/queue/:ticket', 'DELETE /public/events/:eventId/queue/:ticket']);
 /** Routes whose authorization is a row-level check inside the handler (own orders, door scan, ...). Later tasks add theirs. */
 export const SELF_CHECKED_ROUTES = new Set(['POST /public/events/:eventId/holds', 'GET /holds/:holdId', 'DELETE /holds/:holdId',
   'POST /holds/:holdId/pay', 'GET /me/orders', 'GET /orders/:orderId',
@@ -108,8 +111,12 @@ for (const row of MATRIX) {
         if (rank[role] < rank[row.min]) expect(res.status).toBe(403);
         else {
           expect([401, 403]).not.toContain(res.status);
-          expect(res.status).toBeLessThan(500);
-          await res.body?.cancel(); // SSE rows would otherwise keep streaming
+          // the rush rows end in 503 here: no simulator runs in the matrix test
+          if (row.pattern.endsWith('/rush')) expect([202, 200, 503]).toContain(res.status);
+          else expect(res.status).toBeLessThan(500);
+          // SSE rows would keep streaming; cancelling a half-written XLSX stream throws later, so other bodies are drained
+          if (row.pattern.endsWith('/live')) await res.body?.cancel();
+          else await res.arrayBuffer();
         }
       });
     }

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { DEMO_USERS, MAX_SEATS_PER_HOLD, MAX_SEATS_PER_VENUE } from './constants';
+import { DEMO_USERS, MAX_RUSH_BUYERS, MAX_SEATS_PER_HOLD, MAX_SEATS_PER_VENUE } from './constants';
 import { UUID_RE } from './ids';
 
 const email = z.string().trim().toLowerCase().email();
@@ -86,3 +86,10 @@ export const exportQuerySchema = z
     { message: `The range is at most ${MAX_EXPORT_RANGE_DAYS} days`, path: ['to'] },
   );
 export type ExportQuery = z.infer<typeof exportQuerySchema>;
+
+export const rushSchema = z.object({
+  buyers: z.number().int().min(1).max(MAX_RUSH_BUYERS),
+  maxSeatsPerBuyer: z.number().int().min(1).max(4).default(2),
+  durationSeconds: z.number().int().min(5).max(300).default(30),
+});
+export type RushInput = z.infer<typeof rushSchema>;

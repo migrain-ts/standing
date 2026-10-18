@@ -16,6 +16,7 @@ import { holdRoutes } from './routes/holds';
 import { orderRoutes } from './routes/orders';
 import { publicRoutes } from './routes/public';
 import { queueRoutes } from './routes/queue';
+import { rushRoutes } from './routes/rush';
 import { liveRoutes } from './routes/live';
 import { venueRoutes } from './routes/venues';
 import { availabilityLoader, type Availability } from './services/availability';
@@ -32,6 +33,8 @@ export type AppConfig = {
   demoLogin: boolean;
   simulatorUrl?: string | undefined;
   simulatorToken?: string | undefined;
+  /** The URL at which the simulator reaches this API. */
+  simulatorApiUrl: string;
 };
 export type Deps = {
   db: Db;
@@ -100,7 +103,8 @@ export function createAppWithServices(deps: Deps, opts: AppOptions = {}) {
     .route('/', doorRoutes())
     .route('/', liveRoutes())
     .route('/', exportRoutes())
-    .route('/', overviewRoutes());
+    .route('/', overviewRoutes())
+    .route('/', rushRoutes());
   return { app, svc };
 }
 

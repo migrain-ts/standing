@@ -12,5 +12,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     demoLogin: env.DEMO_LOGIN === '1',
     simulatorUrl: env.SIMULATOR_URL,
     simulatorToken: env.SIMULATOR_TOKEN,
+    simulatorApiUrl: env.SIMULATOR_API_URL ?? 'http://localhost:4100',
   };
 }
