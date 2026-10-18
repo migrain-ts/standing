@@ -1,4 +1,5 @@
 import { serve } from '@hono/node-server';
+import { createRedis } from '@standing/core';
 import { createDb, runMigrations } from '@standing/db';
 import { numberFromEnv, SystemClock } from '@standing/shared';
 import { createApp } from './app';
@@ -14,6 +15,7 @@ if (process.env.SEED_DEMO === '1') {
   const { seedDemo } = await import('./seed');
   console.log('[api] demo seed', await seedDemo(db, new SystemClock()));
 }
+const redis = process.env.REDIS_URL ? createRedis(process.env.REDIS_URL) : undefined;
 const app = createApp({
   db,
   clock: new SystemClock(),
@@ -21,6 +23,7 @@ const app = createApp({
   appUrl: process.env.APP_URL ?? 'http://localhost:3200',
   secureCookies: process.env.NODE_ENV === 'production' && process.env.INSECURE_COOKIES !== '1',
   trustProxy: process.env.TRUST_PROXY === '1',
+  ...(redis ? { redis } : {}),
 });
 const port = numberFromEnv(process.env.API_PORT, 4100);
 serve({ fetch: app.fetch, port }, () => console.log(`[api] listening on :${port}`));

@@ -33,7 +33,8 @@ export const MATRIX: Row[] = [
 ];
 
 /** Routes that need a session but no tenant role. They must answer 401 anonymously. */
-export const AUTHED_ROUTES = new Set(['POST /auth/logout', 'GET /auth/me', 'GET /tenants', 'POST /tenants']);
+export const AUTHED_ROUTES = new Set(['POST /auth/logout', 'GET /auth/me', 'GET /tenants', 'POST /tenants',
+  'POST /public/events/:eventId/queue', 'GET /public/events/:eventId/queue/:ticket']);
 /** Routes whose authorization is a row-level check inside the handler (own orders, door scan, ...). Later tasks add theirs. */
 export const SELF_CHECKED_ROUTES = new Set<string>();
 /** Routes open to everyone. */
