@@ -67,20 +67,72 @@ describe('createHold', () => {
 
   it('never leaves a partial hold or a 500 when 60 buyers request overlapping pairs in opposite orders', async () => {
     const f = await insertEventFixture(t.db, { rows: 1, seatsPerRow: 6 });
-    const buyers = await Promise.all(Array.from({ length: 60 }, (_, i) => makeUser(t, `p${i}`)));
     const pairs = [[0, 1], [1, 0], [1, 2], [2, 1], [2, 3], [3, 2], [4, 5], [5, 4]] as const;
-    const results = await Promise.allSettled(
-      buyers.map((b, i) => {
-        const [x, y] = pairs[i % pairs.length]!;
-        return createHold(t.deps, { buyerId: b.id, eventId: f.eventId, seatIds: [f.seatIds[x]!, f.seatIds[y]!] });
-      }),
-    );
-    for (const r of results) {
-      if (r.status === 'rejected') expect(r.reason).toMatchObject({ status: 409 });
+    let fulfilled = 0;
+    for (let round = 0; round < 5 && fulfilled === 0; round++) {
+      const buyers = await Promise.all(Array.from({ length: 60 }, (_, i) => makeUser(t, `p${round}-${i}`)));
+      const results = await Promise.allSettled(
+        buyers.map((b, i) => {
+          const [x, y] = pairs[i % pairs.length]!;
+          return createHold(t.deps, { buyerId: b.id, eventId: f.eventId, seatIds: [f.seatIds[x]!, f.seatIds[y]!] });
+        }),
+      );
+      for (const r of results) {
+        if (r.status === 'fulfilled') fulfilled++;
+        else {
+          expect(r.reason).toMatchObject({ status: 409 });
+          expect((r.reason as ApiError).details?.taken).toEqual(expect.any(Array));
+          expect(((r.reason as ApiError).details?.taken as unknown[]).length).toBeGreaterThan(0);
+        }
+      }
     }
+    expect(fulfilled).toBeGreaterThan(0);
     await expectNoPartialHolds(f.eventId);
     const seatsPerHold = await t.db.execute(sql`select count(distinct hold_id)::int as holds, count(*)::int as seats from event_seats where event_id = ${f.eventId}::uuid and status = 'held'`);
     expect(Number(seatsPerHold.rows[0]?.seats)).toBe(Number(seatsPerHold.rows[0]?.holds) * 2);
+  });
+
+  it('serializes concurrent requests from the same buyer: one active hold, no orphan seats', async () => {
+    for (let i = 0; i < 20; i++) {
+      const f = await insertEventFixture(t.db, { rows: 1, seatsPerRow: 8 });
+      const a = await makeUser(t, `same${i}`);
+      if (i % 2 === 1) await createHold(t.deps, { buyerId: a.id, eventId: f.eventId, seatIds: [f.seatIds[7]!] });
+      const results = await Promise.allSettled([
+        createHold(t.deps, { buyerId: a.id, eventId: f.eventId, seatIds: [f.seatIds[0]!, f.seatIds[1]!] }),
+        createHold(t.deps, { buyerId: a.id, eventId: f.eventId, seatIds: [f.seatIds[2]!, f.seatIds[3]!] }),
+      ]);
+      for (const r of results) {
+        if (r.status === 'rejected') {
+          expect(r.reason).toBeInstanceOf(ApiError);
+          expect(['hold_in_progress', 'seats_unavailable']).toContain((r.reason as ApiError).code);
+        }
+      }
+      expect(results.some((r) => r.status === 'fulfilled')).toBe(true);
+      const active = await t.db.execute(sql`select count(*)::int as n from holds where buyer_id = ${a.id}::uuid and event_id = ${f.eventId}::uuid and status = 'active'`);
+      expect(Number(active.rows[0]?.n)).toBe(1);
+      await expectNoPartialHolds(f.eventId);
+    }
+  });
+
+  it('keeps the race exact when every first hold has expired mid-run (lazy expiry, no cleanup)', async () => {
+    const f = await insertEventFixture(t.db, { rows: 5, seatsPerRow: 10 });
+    const first = await Promise.all(Array.from({ length: 50 }, (_, i) => makeUser(t, `x${i}`)));
+    const firstHolds = await Promise.all(
+      first.map((b, i) => createHold(t.deps, { buyerId: b.id, eventId: f.eventId, seatIds: [f.seatIds[i]!] })),
+    );
+    t.clock.advanceMs(600_001);
+    const buyers = await Promise.all(Array.from({ length: 200 }, (_, i) => makeUser(t, `y${i}`)));
+    const results = await Promise.allSettled(
+      buyers.map((b, i) => createHold(t.deps, { buyerId: b.id, eventId: f.eventId, seatIds: [f.seatIds[i % 50]!] })),
+    );
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(50);
+    const rejected = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+    expect(rejected.every((r) => r.reason instanceof ApiError && r.reason.status === 409)).toBe(true);
+    const old = new Set(firstHolds.map((h) => h.id));
+    const rows = await t.db.execute(sql`select hold_id from event_seats where event_id = ${f.eventId}::uuid and status = 'held'`);
+    expect(rows.rows).toHaveLength(50);
+    expect(rows.rows.every((r) => !old.has(String(r.hold_id) as (typeof firstHolds)[number]['id']))).toBe(true);
+    await expectNoPartialHolds(f.eventId);
   });
 
   it('lets another buyer take seats whose hold has expired, without any cleanup running', async () => {

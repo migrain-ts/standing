@@ -75,6 +75,13 @@ export async function createHold(
   const seatIds = o.seatIds.map((s) => asId<'SeatId'>(s.toLowerCase()));
   const eventId = asId<'EventId'>(o.eventId.toLowerCase());
   return deps.db.transaction(async (tx) => {
+    // One reservation at a time per buyer and event. Never wait: a second concurrent request is told to retry.
+    const lock = await tx.execute(
+      sql`select pg_try_advisory_xact_lock(hashtextextended(${`${o.buyerId}:${eventId}`}, 0)) as ok`,
+    );
+    if (lock.rows[0]?.ok !== true) {
+      throw new ApiError(409, 'hold_in_progress', 'Another reservation request is in progress, try again');
+    }
     const [event] = await tx.select({ status: schema.events.status }).from(schema.events).where(eq(schema.events.id, eventId));
     if (!event || event.status !== 'published') throw notFound();
 
