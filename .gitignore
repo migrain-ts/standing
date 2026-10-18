@@ -7,3 +7,8 @@ test-results
 playwright-report
 .superpowers
 docs/media/tmp
+.vitest
+next-env.d.ts
+*.tsbuildinfo
+AGENTS.md
+.env.local

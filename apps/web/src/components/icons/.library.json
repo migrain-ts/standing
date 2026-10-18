@@ -1,0 +1,20 @@
+{
+  "library": "mingcute",
+  "prefix": "mingcute",
+  "source": "iconify",
+  "installedAt": "2026-10-18T18:49:23.613Z",
+  "icons": [
+    "add-line",
+    "building-2-line",
+    "calendar-line",
+    "check-line",
+    "dashboard-line",
+    "down-line",
+    "download-line",
+    "exit-line",
+    "group-line",
+    "scan-line",
+    "ticket-line",
+    "user-1-line"
+  ]
+}
