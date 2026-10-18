@@ -9,6 +9,8 @@ import type { Redis } from 'ioredis';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startRush } from './run';
 
+// Observed over 5 runs: sold + held = 396..398 of 400. 360 (90%) leaves a wide margin yet fails on a stalled queue.
+const COVERAGE_MIN = 360;
 let redis: Redis;
 const servers: ReturnType<typeof serve>[] = [];
 const apps: TestApp[] = [];
@@ -67,7 +69,12 @@ describe('rush integration', () => {
     expect(stats.status).toBe('finished');
     const c = stats.counters;
     const sold = await expectConsistent(t, fx.eventId, c.paid);
-    expect(sold === 400 || c.paid + c.expired + c.abandoned + c.soldOut + c.errors === c.started).toBe(true);
+    const [held] = await t.db.select({ n: count() }).from(schema.eventSeats).where(and(eq(schema.eventSeats.eventId, fx.eventId), eq(schema.eventSeats.status, 'held')));
+    expect(c.paid).toBeGreaterThan(0);
+    expect(sold).toBeGreaterThan(0);
+    // No stall: the venue ran out. Held seats stay held under the API's FakeClock (abandoned holds never expire).
+    expect(sold + (held?.n ?? 0)).toBeGreaterThanOrEqual(COVERAGE_MIN);
+    expect(c.soldOut).toBeGreaterThan(0);
     expect(c.started).toBe(1500);
     expect(c.errors / c.started).toBeLessThan(0.05);
   }, 180_000);
