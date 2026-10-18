@@ -72,11 +72,12 @@ export async function payHold(
   return deps.db.transaction(async (tx): Promise<PayResult> => {
     const now = deps.clock.now();
     const locked = await tx.execute(sql`
-      select h.id, h.event_id, h.seat_count, h.status, h.expires_at, e.tenant_id
+      select h.id, h.event_id, h.seat_count, h.status, h.expires_at, e.tenant_id,
+        (e.status = 'published' and e.starts_at > ${now}::timestamptz) as on_sale
       from holds h join events e on e.id = h.event_id
       where h.id = ${holdId}::uuid and h.buyer_id = ${o.buyerId}::uuid for update of h`);
     const hold = locked.rows[0] as
-      | { id: string; event_id: string; seat_count: number; status: string; expires_at: Date | string; tenant_id: string }
+      | { id: string; event_id: string; seat_count: number; status: string; expires_at: Date | string; tenant_id: string; on_sale: boolean }
       | undefined;
     if (!hold) throw notFound();
 
@@ -89,6 +90,8 @@ export async function payHold(
       return { kind: 'paid', replayed: true, order: await loadOrderView(tx, deps.config.ticketSecret, prior.orderId) };
     }
     if (hold.status === 'paid') throw new ApiError(409, 'already_paid', 'This reservation is already paid');
+    // Sales stop when the event is closed or has started; nothing is written and the hold stays as it is.
+    if (!hold.on_sale) throw new ApiError(409, 'event_closed', 'Sales are closed for this event');
     if (hold.status !== 'active' || new Date(hold.expires_at) <= now) throw expired();
 
     const seats = await tx.execute(sql`

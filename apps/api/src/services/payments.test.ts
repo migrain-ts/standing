@@ -105,6 +105,32 @@ describe('payHold', () => {
     await flaky.close();
   });
 
+  it('refuses to sell once the event is closed: 409 event_closed, no order, seats still held', async () => {
+    const { f, buyer, hold } = await heldBy('closed');
+    await t.db.execute(sql`update events set status = 'closed' where id = ${f.eventId}::uuid`);
+    await expect(payHold(t.deps, { holdId: hold.id, buyerId: buyer.id, idempotencyKey: 'c' })).rejects.toMatchObject({
+      status: 409, code: 'event_closed', message: 'Sales are closed for this event',
+    });
+    expect(await count(sql`select count(*)::int as n from orders where event_id = ${f.eventId}::uuid`)).toBe(0);
+    expect(await count(sql`select count(*)::int as n from payments where hold_id = ${hold.id}::uuid`)).toBe(0);
+    expect(await count(sql`select count(*)::int as n from event_seats where hold_id = ${hold.id}::uuid and status = 'held'`)).toBe(2);
+    expect(await count(sql`select count(*)::int as n from holds where id = ${hold.id}::uuid and status = 'active'`)).toBe(1);
+  });
+
+  it('refuses to sell once the event has started (bound clock), and a normal pay still works', async () => {
+    const { f, buyer, hold } = await heldBy('started');
+    const ok = await heldBy('notstarted');
+    await t.db.execute(sql`update events set starts_at = ${new Date(t.clock.now().getTime() + 60_000)}::timestamptz where id = ${f.eventId}::uuid`);
+    t.clock.advanceMs(60_000);
+    try {
+      await expect(payHold(t.deps, { holdId: hold.id, buyerId: buyer.id, idempotencyKey: 's' })).rejects.toMatchObject({ status: 409, code: 'event_closed' });
+      expect(await count(sql`select count(*)::int as n from orders where event_id = ${f.eventId}::uuid`)).toBe(0);
+      expect((await payHold(t.deps, { holdId: ok.hold.id, buyerId: ok.buyer.id, idempotencyKey: 'n' })).kind).toBe('paid');
+    } finally {
+      t.clock.advanceMs(-60_000);
+    }
+  });
+
   it('hides other buyers holds', async () => {
     const { hold } = await heldBy('mine');
     const stranger = await makeUser(t, 'stranger');
