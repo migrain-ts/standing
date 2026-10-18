@@ -1,4 +1,4 @@
-import type { Redis } from 'ioredis';
+import { Redis } from 'ioredis';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { liveChannel, type EventDelta } from '@standing/core';
 import { connectTestRedis } from '../test-helpers';
@@ -18,10 +18,13 @@ const until = async (fn: () => boolean, ms = 1500) => {
   while (!fn() && Date.now() < end) await new Promise((r) => setTimeout(r, 10));
 };
 
+const settle = () => new Promise((r) => setTimeout(r, 200)); // start() no longer waits for the psubscribe
+
 describe('LiveBus', () => {
   it('delivers only to subscribers of that event, and unsubscribe removes the listener', async () => {
     const bus = new LiveBus(redis.duplicate());
     await bus.start();
+    await settle();
     const a: EventDelta[] = [];
     const b: EventDelta[] = [];
     const offA = bus.subscribe('ev-a', (d) => a.push(d));
@@ -43,6 +46,7 @@ describe('LiveBus', () => {
     const log = vi.fn();
     const bus = new LiveBus(redis.duplicate(), log);
     await bus.start();
+    await settle();
     const got: EventDelta[] = [];
     bus.subscribe('ev-c', (d) => got.push(d));
     await redis.publish(liveChannel('ev-c'), '{not json');
@@ -50,7 +54,7 @@ describe('LiveBus', () => {
     await redis.publish(liveChannel('ev-c'), JSON.stringify(delta('ev-c')));
     await until(() => got.length === 1);
     expect(got).toHaveLength(1);
-    expect(log).toHaveBeenCalledTimes(2);
+    expect(log.mock.calls.filter(([l]) => String(l).includes("malformed"))).toHaveLength(2);
     await bus.stop();
   });
 
@@ -71,6 +75,35 @@ describe('LiveBus', () => {
     await new Promise((r) => setTimeout(r, 100));
     expect(got).toEqual([]);
     off();
+    await bus.stop();
+  });
+
+  it('start() returns quickly when Redis is unreachable, and subscribe still works', async () => {
+    const dead = new Redis('redis://127.0.0.1:1', { enableOfflineQueue: false, maxRetriesPerRequest: 1, retryStrategy: () => 200 });
+    dead.on('error', () => {});
+    const bus = new LiveBus(dead, () => {});
+    const t0 = Date.now();
+    await bus.start();
+    expect(Date.now() - t0).toBeLessThan(2000);
+    const got: EventDelta[] = [];
+    const off = bus.subscribe('ev-e', (d) => got.push(d));
+    expect(bus.listenerCount('ev-e')).toBe(1);
+    off();
+    expect(got).toEqual([]);
+    await bus.stop();
+  });
+
+  it('calling start() twice delivers each message exactly once', async () => {
+    const bus = new LiveBus(redis.duplicate());
+    await bus.start();
+    await bus.start();
+    const got: EventDelta[] = [];
+    bus.subscribe('ev-f', (d) => got.push(d));
+    await until(() => bus.listenerCount('ev-f') === 1);
+    await new Promise((r) => setTimeout(r, 200)); // let the async psubscribe settle
+    await redis.publish(liveChannel('ev-f'), JSON.stringify(delta('ev-f')));
+    await new Promise((r) => setTimeout(r, 200));
+    expect(got).toHaveLength(1);
     await bus.stop();
   });
 });

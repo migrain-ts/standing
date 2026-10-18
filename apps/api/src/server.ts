@@ -16,6 +16,16 @@ if (process.env.SEED_DEMO === '1') {
   console.log('[api] demo seed', await seedDemo(db, new SystemClock()));
 }
 const redis = process.env.REDIS_URL ? createRedis(process.env.REDIS_URL) : undefined;
+const liveSub = redis?.duplicate();
+if (liveSub) {
+  const seen = new Set<string>();
+  liveSub.on('error', (err: Error) => {
+    if (seen.has(err.message)) return;
+    seen.add(err.message);
+    console.error(`[redis:live] ${err.message}`);
+  });
+  liveSub.on('ready', () => seen.clear());
+}
 const { app, svc } = createAppWithServices({
   db,
   clock: new SystemClock(),
@@ -23,7 +33,7 @@ const { app, svc } = createAppWithServices({
   appUrl: process.env.APP_URL ?? 'http://localhost:3200',
   secureCookies: process.env.NODE_ENV === 'production' && process.env.INSECURE_COOKIES !== '1',
   trustProxy: process.env.TRUST_PROXY === '1',
-  ...(redis ? { redis, liveSub: redis.duplicate() } : {}),
+  ...(redis ? { redis, ...(liveSub ? { liveSub } : {}) } : {}),
 });
 await svc.liveBus.start();
 const port = numberFromEnv(process.env.API_PORT, 4100);
