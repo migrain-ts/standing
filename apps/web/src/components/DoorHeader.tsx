@@ -9,7 +9,7 @@ export function DoorHeader() {
   const me = useMe().data ?? null;
   return (
     <header className="flex h-12 items-center justify-between border-b border-border bg-background px-3">
-      <Link href="/door" className="flex items-center gap-2 text-sm font-semibold">
+      <Link href="/door" className="flex min-h-11 min-w-11 items-center gap-2 text-sm font-semibold">
         <ScanLineIcon className="size-5 text-primary" aria-hidden />
         Door
       </Link>
