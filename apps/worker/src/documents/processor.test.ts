@@ -78,11 +78,14 @@ describe('processDocument', () => {
 
   it('does not let a superseded run overwrite a newer claim (attempt fence)', async () => {
     const { documentId } = await insertTicketDocument(t.db, { seats: 1, at: t.clock.now() });
-    // Simulate: another worker re-claimed (attempts moved on) while this one was rendering.
-    const fenced = await t.db.execute(sql`
-      update documents set status = 'ready', content = 'x'::bytea
-      where id = ${documentId}::uuid and status = 'running' and attempts = 99`);
-    expect(fenced.rowCount).toBe(0);
+    // While the first run renders, a competing worker re-claims the row (attempts moves on).
+    const slowRender: typeof renderTicketPdf = async (data) => {
+      await t.db.execute(sql`update documents set attempts = attempts + 1 where id = ${documentId}::uuid`);
+      return renderTicketPdf(data);
+    };
+    expect(await processDocument(t.db, { ...deps(), renderTicket: slowRender }, documentId)).toBe('skipped');
+    const doc = await load(documentId);
+    expect([doc.status, doc.attempts, doc.content]).toEqual(['running', 2, null]);
   });
 });
 

@@ -81,7 +81,7 @@ function assertNever(x: never): never {
  */
 export async function processDocument(
   db: Db,
-  deps: { clock: Clock; ticketSecret: string },
+  deps: { clock: Clock; ticketSecret: string; /** Test seam. */ renderTicket?: typeof renderTicketPdf },
   documentId: string,
 ): Promise<ProcessResult> {
   const now = deps.clock.now();
@@ -101,7 +101,7 @@ export async function processDocument(
   try {
     const content =
       c.kind === 'ticket_pdf'
-        ? await renderTicketPdf(await loadTicketData(db, deps.ticketSecret, c))
+        ? await (deps.renderTicket ?? renderTicketPdf)(await loadTicketData(db, deps.ticketSecret, c))
         : c.kind === 'report_pdf'
           ? await renderReportPdf(await loadReportData(db, deps.clock, c))
           : assertNever(c.kind);

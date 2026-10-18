@@ -6,5 +6,5 @@ export const documentJobOptions = {
   attempts: 3,
   backoff: { type: 'exponential', delay: 2000 },
   removeOnComplete: true,
-  removeOnFail: 100,
+  removeOnFail: true, // failure reason lives in documents.error; a retained failed job would block sweeper re-adds (same jobId)
 } as const;
