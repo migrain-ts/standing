@@ -25,6 +25,7 @@ import { selectionReducer, type SelectionAction } from '@/lib/selection';
 import { FREE_ALPHA, sectionToken, statusArray, type Availability, type VenueMap } from '@/lib/seatmap';
 import { isSellingFast, seatsLabel, takenSeatIds, type EventDetail, type HoldDto, type OrderDto } from '@/lib/storefront';
 import { MAX_SEATS_PER_HOLD } from '@standing/shared';
+import { joinPath } from '@/lib/paths';
 
 const NONE: ReadonlySet<number> = new Set();
 
@@ -35,12 +36,12 @@ export default function EventPage() {
   const me = useMe();
   const signedIn = Boolean(me.data);
 
-  const eventQ = useQuery({ queryKey: ['event', eventId], queryFn: () => api<{ event: EventDetail }>(`/public/events/${eventId}`) });
-  const mapQ = useQuery({ queryKey: ['map', eventId], queryFn: () => api<VenueMap>(`/public/events/${eventId}/map`), staleTime: Infinity });
+  const eventQ = useQuery({ queryKey: ['event', eventId], queryFn: () => api<{ event: EventDetail }>(joinPath('public', 'events', eventId)) });
+  const mapQ = useQuery({ queryKey: ['map', eventId], queryFn: () => api<VenueMap>(joinPath('public', 'events', eventId, 'map')), staleTime: Infinity });
   // Polled every 2 s; TanStack pauses the interval while the tab is hidden.
   const availQ = useQuery({
     queryKey: ['availability', eventId],
-    queryFn: () => api<Availability>(`/public/events/${eventId}/availability`),
+    queryFn: () => api<Availability>(joinPath('public', 'events', eventId, 'availability')),
     refetchInterval: 2000,
   });
 
@@ -136,7 +137,7 @@ export default function EventPage() {
 
   const onReserve = async () => {
     if (!signedIn) {
-      router.push(`/login?next=${encodeURIComponent(`/events/${eventId}`)}`);
+      router.push(`/login?next=${encodeURIComponent(joinPath('events', eventId))}`);
       return;
     }
     if (checkout.phase !== 'selecting' || !map) return;
@@ -144,7 +145,7 @@ export default function EventPage() {
     setNotice(null);
     dispatch({ type: 'reserve' });
     try {
-      const { hold: h } = await api<{ hold: HoldDto }>(`/public/events/${eventId}/holds`, {
+      const { hold: h } = await api<{ hold: HoldDto }>(joinPath('public', 'events', eventId, 'holds'), {
         method: 'POST',
         json: { seatIds },
         ...(queueHeader ? { headers: queueHeader } : {}),
@@ -177,7 +178,7 @@ export default function EventPage() {
   const submitPayment = async (h: { id: string }, key: string) => {
     dispatch({ type: 'submit' });
     try {
-      const { order } = await api<{ order: OrderDto }>(`/holds/${h.id}/pay`, {
+      const { order } = await api<{ order: OrderDto }>(joinPath('holds', h.id, 'pay'), {
         method: 'POST',
         headers: { 'idempotency-key': key, ...(queueHeader ?? {}) },
       });
@@ -211,7 +212,7 @@ export default function EventPage() {
     const declined = checkout.phase === 'declined';
     const h = hold;
     dispatch({ type: 'cancel' });
-    if (h) await api(`/holds/${h.id}`, { method: 'DELETE' }).catch(() => undefined);
+    if (h) await api(joinPath('holds', h.id), { method: 'DELETE' }).catch(() => undefined);
     if (declined) {
       // A buyer who gave up after a decline frees the admission slot and rejoins the line if they come back.
       releaseTicket(eventId, ticketRef.current);

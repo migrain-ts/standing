@@ -12,6 +12,7 @@ import { api } from '@/lib/api';
 import { ME_KEY, useMe } from '@/lib/auth';
 import { toastError } from '@/lib/organizer';
 import { pickDefaultTenant, readStoredTenant } from '@/lib/tenants';
+import { orgPath } from '@/lib/paths';
 
 /** /org opens the last used organization, else the first one the user can organize. */
 export default function OrgIndexPage() {
@@ -31,7 +32,7 @@ export default function OrgIndexPage() {
     onSuccess: async ({ tenant }) => {
       await qc.invalidateQueries({ queryKey: ME_KEY });
       toast.success('Organization created');
-      router.replace(`/org/${tenant.id}`);
+      router.replace(orgPath(tenant.id));
     },
     onError: toastError,
   });

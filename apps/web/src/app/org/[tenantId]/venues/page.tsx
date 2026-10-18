@@ -15,6 +15,7 @@ import { api } from '@/lib/api';
 import { orgKeys, toastError, useOrgTenant, type VenueRow } from '@/lib/organizer';
 import { canManage } from '@/lib/tenants';
 import { trapTab } from '@/lib/focusTrap';
+import { tenantApi } from '@/lib/paths';
 
 export default function VenuesPage() {
   const { tenantId, tenant, ready } = useOrgTenant();
@@ -22,11 +23,11 @@ export default function VenuesPage() {
   const [open, setOpen] = useState(false);
   const q = useQuery({
     queryKey: orgKeys.venues(tenantId),
-    queryFn: () => api<{ venues: VenueRow[] }>(`/tenants/${tenantId}/venues`),
+    queryFn: () => api<{ venues: VenueRow[] }>(tenantApi(tenantId, 'venues')),
     enabled: tenant != null,
   });
   const create = useMutation({
-    mutationFn: (v: VenueCreateInput) => api<{ venue: VenueRow }>(`/tenants/${tenantId}/venues`, { method: 'POST', json: v }),
+    mutationFn: (v: VenueCreateInput) => api<{ venue: VenueRow }>(tenantApi(tenantId, 'venues'), { method: 'POST', json: v }),
     onSuccess: ({ venue }) => {
       toast.success(`${venue.name} created with ${venue.seatCount.toLocaleString('en-IE')} seats`);
       setOpen(false);

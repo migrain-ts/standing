@@ -14,12 +14,13 @@ import { api } from '@/lib/api';
 import { formatDateTime, formatMoney } from '@/lib/format';
 import type { DocumentDto, OrderDto, OrderRow } from '@/lib/storefront';
 import { seatsLabel } from '@/lib/storefront';
+import { joinPath } from '@/lib/paths';
 
 /** Polls the ticket PDF until it is ready, then enables the download. */
 function PdfDownload({ documentId }: { documentId: string }) {
   const q = useQuery({
     queryKey: ['document', documentId],
-    queryFn: () => api<{ document: DocumentDto }>(`/documents/${documentId}`),
+    queryFn: () => api<{ document: DocumentDto }>(joinPath('documents', documentId)),
     refetchInterval: (query) => {
       const status = query.state.data?.document.status;
       return status === 'ready' || status === 'failed' ? false : 1500;
@@ -32,7 +33,7 @@ function PdfDownload({ documentId }: { documentId: string }) {
       <Button
         className="h-11 md:h-10"
         disabled={!ready}
-        onClick={() => window.location.assign(`/api/documents/${documentId}/download`)}
+        onClick={() => window.location.assign(`/api${joinPath('documents', documentId, 'download')}`)}
       >
         <DownloadLineIcon className="size-4" aria-hidden />
         Download tickets (PDF)
@@ -51,7 +52,7 @@ function PdfDownload({ documentId }: { documentId: string }) {
 
 function Order() {
   const { orderId } = useParams<{ orderId: string }>();
-  const orderQ = useQuery({ queryKey: ['order', orderId], queryFn: () => api<{ order: OrderDto }>(`/orders/${orderId}`) });
+  const orderQ = useQuery({ queryKey: ['order', orderId], queryFn: () => api<{ order: OrderDto }>(joinPath('orders', orderId)) });
   const rowsQ = useQuery({ queryKey: ['orders'], queryFn: () => api<{ orders: OrderRow[] }>('/me/orders') });
   const order = orderQ.data?.order;
   const row = rowsQ.data?.orders.find((o) => o.id === orderId);

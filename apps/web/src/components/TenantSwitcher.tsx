@@ -5,6 +5,7 @@ import { DownLineIcon } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { storeTenant } from '@/lib/tenants';
+import { orgPath } from '@/lib/paths';
 
 type Props = { tenants: { id: string; name: string }[]; activeId: string | null; suffix: string; onNavigate?: () => void };
 
@@ -27,7 +28,7 @@ export function TenantSwitcher({ tenants, activeId, suffix, onNavigate }: Props)
             key={t.id}
             className="min-h-11 md:min-h-0"
             onClick={() => {
-              router.push(`/org/${t.id}${suffix}`);
+              router.push(`${orgPath(t.id)}${suffix}`);
               onNavigate?.();
             }}
           >

@@ -14,6 +14,7 @@ import { formatDateTime, formatMoney } from '@/lib/format';
 import { fillPercent, orgKeys, useOrgTenant, type Overview } from '@/lib/organizer';
 import { canManage } from '@/lib/tenants';
 import { cn } from '@/lib/utils';
+import { orgPath, tenantApi } from '@/lib/paths';
 
 function Figure({ label, value }: { label: string; value: string }) {
   return (
@@ -28,7 +29,7 @@ export default function OverviewPage() {
   const { tenantId, tenant, ready } = useOrgTenant();
   const q = useQuery({
     queryKey: orgKeys.overview(tenantId),
-    queryFn: () => api<Overview>(`/tenants/${tenantId}/overview`),
+    queryFn: () => api<Overview>(tenantApi(tenantId, 'overview')),
     enabled: tenant != null,
   });
   if (ready && !tenant) return <TenantMissing />;
@@ -48,7 +49,7 @@ export default function OverviewPage() {
         description={tenant ? `Sales for ${tenant.name} over the last 30 days.` : 'Sales over the last 30 days.'}
         action={
           tenant && canManage(tenant.role) ? (
-            <Link href={`/org/${tenantId}/events?new=1`} className={cn(buttonVariants(), 'h-11 md:h-9')}>
+            <Link href={`${orgPath(tenantId, 'events')}?new=1`} className={cn(buttonVariants(), 'h-11 md:h-9')}>
               <AddLineIcon className="size-4" aria-hidden />
               New event
             </Link>
@@ -109,7 +110,7 @@ export default function OverviewPage() {
                     return (
                       <TableRow key={e.id}>
                         <TableCell className="px-2 sm:px-4 font-medium">
-                          <Link href={`/org/${tenantId}/events/${e.id}`} className="inline-flex min-h-11 items-center underline-offset-4 hover:underline md:min-h-0">
+                          <Link href={orgPath(tenantId, 'events', e.id)} className="inline-flex min-h-11 items-center underline-offset-4 hover:underline md:min-h-0">
                             {e.name}
                           </Link>
                         </TableCell>

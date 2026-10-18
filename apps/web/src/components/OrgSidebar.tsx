@@ -11,6 +11,7 @@ import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarHeader } f
 import { useMe } from '@/lib/auth';
 import { cn } from '@/lib/utils';
 import { trapTab } from '@/lib/focusTrap';
+import { orgPath } from '@/lib/paths';
 
 const SECTIONS = [
   { label: 'Overview', path: '', icon: <DashboardLineIcon /> },
@@ -44,7 +45,7 @@ function SidebarBody({ onNavigate, inSheet = false }: { onNavigate?: () => void;
   const { tenantId } = useParams<{ tenantId?: string }>();
   const tenants = (me?.tenants ?? []).filter((t) => t.role !== 'door');
   const active = tenants.find((t) => t.id === tenantId) ?? null;
-  const base = active ? `/org/${active.id}` : '/org';
+  const base = active ? orgPath(active.id) : '/org';
   const suffix = SECTIONS.find((s) => s.path && pathname.startsWith(`${base}${s.path}`))?.path ?? '';
   return (
     <>

@@ -16,6 +16,7 @@ import { api } from '@/lib/api';
 import { orgKeys, toastError, useOrgTenant, type Member } from '@/lib/organizer';
 import { canAdmin, roleLabel } from '@/lib/tenants';
 import { trapTab } from '@/lib/focusTrap';
+import { tenantApi } from '@/lib/paths';
 
 const ROLES: TenantRoleName[] = ['owner', 'manager', 'door'];
 
@@ -25,11 +26,11 @@ export default function MembersPage() {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<TenantRoleName>('manager');
   const key = orgKeys.members(tenantId);
-  const q = useQuery({ queryKey: key, queryFn: () => api<{ members: Member[] }>(`/tenants/${tenantId}/members`), enabled: tenant != null });
+  const q = useQuery({ queryKey: key, queryFn: () => api<{ members: Member[] }>(tenantApi(tenantId, 'members')), enabled: tenant != null });
   const refresh = () => qc.invalidateQueries({ queryKey: key });
 
   const add = useMutation({
-    mutationFn: () => api(`/tenants/${tenantId}/members`, { method: 'POST', json: { email: email.trim(), role } }),
+    mutationFn: () => api(tenantApi(tenantId, 'members'), { method: 'POST', json: { email: email.trim(), role } }),
     onSuccess: () => {
       toast.success(`${email.trim()} added as ${roleLabel(role).toLowerCase()}`);
       setEmail('');
@@ -38,7 +39,7 @@ export default function MembersPage() {
     onError: toastError,
   });
   const change = useMutation({
-    mutationFn: (v: { userId: string; role: TenantRoleName }) => api(`/tenants/${tenantId}/members/${v.userId}`, { method: 'PATCH', json: { role: v.role } }),
+    mutationFn: (v: { userId: string; role: TenantRoleName }) => api(tenantApi(tenantId, 'members', v.userId), { method: 'PATCH', json: { role: v.role } }),
     onSuccess: () => {
       toast.success('Role updated');
       return refresh();
@@ -50,7 +51,7 @@ export default function MembersPage() {
     },
   });
   const remove = useMutation({
-    mutationFn: (userId: string) => api(`/tenants/${tenantId}/members/${userId}`, { method: 'DELETE' }),
+    mutationFn: (userId: string) => api(tenantApi(tenantId, 'members', userId), { method: 'DELETE' }),
     onSuccess: () => {
       toast.success('Member removed');
       return refresh();

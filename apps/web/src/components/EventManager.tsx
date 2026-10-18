@@ -15,18 +15,19 @@ import { formatDateTime, formatMoney } from '@/lib/format';
 import { orgKeys, toastError, type EventDetail, type Tier, type VenueDetail } from '@/lib/organizer';
 import { cn } from '@/lib/utils';
 import { trapTab } from '@/lib/focusTrap';
+import { orgPath, tenantApi } from '@/lib/paths';
 
 /** Prices, publish and close for one event. The API stays the authority; buttons only mirror its rules. */
 export function EventManager({ tenantId, eventId }: { tenantId: string; eventId: string }) {
   const qc = useQueryClient();
   const detail = useQuery({
     queryKey: orgKeys.event(tenantId, eventId),
-    queryFn: () => api<{ event: EventDetail; tiers: Tier[] }>(`/tenants/${tenantId}/events/${eventId}`),
+    queryFn: () => api<{ event: EventDetail; tiers: Tier[] }>(tenantApi(tenantId, 'events', eventId)),
   });
   const venueId = detail.data?.event.venueId;
   const venue = useQuery({
     queryKey: orgKeys.venue(tenantId, venueId ?? ''),
-    queryFn: () => api<{ venue: VenueDetail }>(`/tenants/${tenantId}/venues/${venueId}`),
+    queryFn: () => api<{ venue: VenueDetail }>(tenantApi(tenantId, 'venues', venueId ?? '')),
     enabled: venueId != null,
   });
 
@@ -37,7 +38,7 @@ export function EventManager({ tenantId, eventId }: { tenantId: string; eventId:
       qc.invalidateQueries({ queryKey: orgKeys.overview(tenantId) }),
     ]);
   const saveTiers = useMutation({
-    mutationFn: (tiers: Tier[]) => api(`/tenants/${tenantId}/events/${eventId}/tiers`, { method: 'PUT', json: tiers }),
+    mutationFn: (tiers: Tier[]) => api(tenantApi(tenantId, 'events', eventId, 'tiers'), { method: 'PUT', json: tiers }),
     onSuccess: () => {
       toast.success('Prices saved');
       return refresh();
@@ -45,7 +46,7 @@ export function EventManager({ tenantId, eventId }: { tenantId: string; eventId:
     onError: toastError,
   });
   const publish = useMutation({
-    mutationFn: () => api(`/tenants/${tenantId}/events/${eventId}/publish`, { method: 'POST' }),
+    mutationFn: () => api(tenantApi(tenantId, 'events', eventId, 'publish'), { method: 'POST' }),
     onSuccess: () => {
       toast.success('Event published');
       return refresh();
@@ -53,7 +54,7 @@ export function EventManager({ tenantId, eventId }: { tenantId: string; eventId:
     onError: toastError,
   });
   const close = useMutation({
-    mutationFn: () => api(`/tenants/${tenantId}/events/${eventId}/close`, { method: 'POST' }),
+    mutationFn: () => api(tenantApi(tenantId, 'events', eventId, 'close'), { method: 'POST' }),
     onSuccess: () => {
       toast.success('Sales closed');
       return refresh();
@@ -114,7 +115,7 @@ export function EventManager({ tenantId, eventId }: { tenantId: string; eventId:
       )}
 
       <div className="flex flex-wrap gap-2">
-        <Link href={`/org/${tenantId}/events/${eventId}`} className={cn(buttonVariants({ variant: 'outline' }), 'h-11 md:h-9')}>
+        <Link href={orgPath(tenantId, 'events', eventId)} className={cn(buttonVariants({ variant: 'outline' }), 'h-11 md:h-9')}>
           Open live page
         </Link>
         {event.status === 'published' && (

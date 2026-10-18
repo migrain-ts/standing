@@ -18,6 +18,7 @@ import { formatDateTime } from '@/lib/format';
 import { orgKeys, toastError, useOrgTenant, type EventDetail, type OrgEvent, type VenueRow } from '@/lib/organizer';
 import { canManage } from '@/lib/tenants';
 import { trapTab } from '@/lib/focusTrap';
+import { orgPath, tenantApi } from '@/lib/paths';
 
 function EventsContent() {
   const { tenantId, tenant, ready } = useOrgTenant();
@@ -29,18 +30,18 @@ function EventsContent() {
 
   const events = useQuery({
     queryKey: orgKeys.events(tenantId),
-    queryFn: () => api<{ events: OrgEvent[] }>(`/tenants/${tenantId}/events`),
+    queryFn: () => api<{ events: OrgEvent[] }>(tenantApi(tenantId, 'events')),
     enabled: tenant != null,
   });
   const venues = useQuery({
     queryKey: orgKeys.venues(tenantId),
-    queryFn: () => api<{ venues: VenueRow[] }>(`/tenants/${tenantId}/venues`),
+    queryFn: () => api<{ venues: VenueRow[] }>(tenantApi(tenantId, 'venues')),
     enabled: tenant != null,
   });
-  const setCreating = (on: boolean) => router.replace(on ? `/org/${tenantId}/events?new=1` : `/org/${tenantId}/events`);
+  const setCreating = (on: boolean) => router.replace(on ? `${orgPath(tenantId, 'events')}?new=1` : orgPath(tenantId, 'events'));
 
   const create = useMutation({
-    mutationFn: (e: NewEvent) => api<{ event: EventDetail }>(`/tenants/${tenantId}/events`, { method: 'POST', json: e }),
+    mutationFn: (e: NewEvent) => api<{ event: EventDetail }>(tenantApi(tenantId, 'events'), { method: 'POST', json: e }),
     onSuccess: async ({ event }) => {
       toast.success(`Draft "${event.name}" created. Set prices, then publish.`);
       setCreating(false);
@@ -91,7 +92,7 @@ function EventsContent() {
               {list.map((e) => (
                 <TableRow key={e.id}>
                   <TableCell className="px-2 sm:px-4 font-medium">
-                    <Link href={`/org/${tenantId}/events/${e.id}`} className="inline-flex min-h-11 items-center underline-offset-4 hover:underline md:min-h-0">
+                    <Link href={orgPath(tenantId, 'events', e.id)} className="inline-flex min-h-11 items-center underline-offset-4 hover:underline md:min-h-0">
                       {e.name}
                     </Link>
                   </TableCell>
@@ -126,7 +127,7 @@ function EventsContent() {
             ) : venueList.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 Create a venue first.{' '}
-                <Link href={`/org/${tenantId}/venues`} className="text-primary underline underline-offset-4">
+                <Link href={orgPath(tenantId, 'venues')} className="text-primary underline underline-offset-4">
                   Go to venues
                 </Link>
               </p>

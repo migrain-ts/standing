@@ -4,6 +4,7 @@ import { Progress } from '@/components/ui/progress';
 import { api, ApiClientError } from '@/lib/api';
 import type { CheckoutAction, CheckoutState } from '@/lib/checkoutMachine';
 import { backoffMs, nextQueueAction, type QueueResponse } from '@/lib/queue';
+import { joinPath } from '@/lib/paths';
 
 const POLL_MS = 1500;
 const noResponse = (): QueueResponse | null => null; // keeps `res` typed as the union, not narrowed to null
@@ -12,7 +13,7 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 /** Best-effort release of a waiting-room slot; safe to call on page hide (keepalive). */
 export function releaseTicket(eventId: string, ticket: string | null): void {
   if (!ticket) return;
-  api(`/public/events/${eventId}/queue/${encodeURIComponent(ticket)}`, { method: 'DELETE', keepalive: true }).catch(() => undefined);
+  api(joinPath('public', 'events', eventId, 'queue', ticket), { method: 'DELETE', keepalive: true }).catch(() => undefined);
 }
 
 /**
@@ -34,8 +35,8 @@ export function useWaitingRoom(eventId: string, phase: CheckoutState['phase'], d
           const prev: QueueResponse | null = res;
           res =
             prev?.state === 'waiting'
-              ? await api<QueueResponse>(`/public/events/${eventId}/queue/${encodeURIComponent(prev.ticket)}`)
-              : await api<QueueResponse>(`/public/events/${eventId}/queue`, { method: 'POST' });
+              ? await api<QueueResponse>(joinPath('public', 'events', eventId, 'queue', prev.ticket))
+              : await api<QueueResponse>(joinPath('public', 'events', eventId, 'queue'), { method: 'POST' });
           failures = 0;
         } catch (e) {
           err = e instanceof ApiClientError ? e : new ApiClientError(0, 'network', 'Network error');

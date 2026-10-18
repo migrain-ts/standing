@@ -14,6 +14,7 @@ import { Separator } from '@/components/ui/separator';
 import type { CheckoutState } from '@/lib/checkoutMachine';
 import { formatCountdown, formatMoney } from '@/lib/format';
 import { seatsLabel } from '@/lib/storefront';
+import { joinPath } from '@/lib/paths';
 
 export type PanelSeat = { idx: number; label: string; priceCents: number };
 
@@ -83,7 +84,7 @@ export function CheckoutPanel(p: Props) {
               <h2 className="text-xl font-semibold">Payment complete</h2>
               <p className="text-sm text-muted-foreground">Your tickets are ready.</p>
             </div>
-            <Link href={`/orders/${state.orderId}`} className={buttonVariants({ className: 'h-11 w-full md:h-10' })}>
+            <Link href={joinPath('orders', state.orderId)} className={buttonVariants({ className: 'h-11 w-full md:h-10' })}>
               View your tickets
             </Link>
           </CardContent>

@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { formatDateTime, formatMoney } from '@/lib/format';
 import { isSellingFast, type EventSummary } from '@/lib/storefront';
+import { joinPath } from '@/lib/paths';
 
 const TOKENS = ['--chart-2', '--chart-3', '--chart-4'] as const;
 
@@ -18,7 +19,7 @@ export function EventCard({ event }: { event: EventSummary }) {
   const soldOut = event.available <= 0;
   return (
     <Link
-      href={`/events/${event.id}`}
+      href={joinPath('events', event.id)}
       className="group block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <Card className="flex h-full flex-col overflow-hidden transition-colors group-hover:border-primary/60">

@@ -12,6 +12,7 @@ import { H1 } from '@/components/ui/typography';
 import { api } from '@/lib/api';
 import { formatDateTime, formatMoney } from '@/lib/format';
 import type { OrderRow } from '@/lib/storefront';
+import { joinPath } from '@/lib/paths';
 
 function Orders() {
   const q = useQuery({ queryKey: ['orders'], queryFn: () => api<{ orders: OrderRow[] }>('/me/orders') });
@@ -47,7 +48,7 @@ function Orders() {
                   <TableCell className="text-muted-foreground">{formatDateTime(o.createdAt)}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatMoney(o.totalCents)}</TableCell>
                   <TableCell className="text-right">
-                    <Link href={`/orders/${o.id}`} className={buttonVariants({ variant: 'secondary', size: 'sm' })}>
+                    <Link href={joinPath('orders', o.id)} className={buttonVariants({ variant: 'secondary', size: 'sm' })}>
                       View<span className="sr-only"> order for {o.eventName}</span>
                     </Link>
                   </TableCell>
