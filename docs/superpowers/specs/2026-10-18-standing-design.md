@@ -82,7 +82,7 @@ If fewer rows come back than requested: rollback and 409 listing the taken seats
 - CSV and XLSX stream from a Postgres cursor (exceljs streaming writer), constant memory on 100,000 rows.
 - Report PDF (summary, chart, per-section table) and ticket PDF are asynchronous jobs with status `queued | running | ready | failed` and a download when ready.
 
-**Multi-tenant and roles**: a single middleware filters by `tenant_id`, in the same spirit as DoseCare's `requireRole`. `owner` (everything, members), `manager` (events, exports, Rush), `door` (scan only). A foreign tenant gets 404, never 403. Table-driven test route × role × other tenant that fails when a route has no check. Postgres row-level security as defense in depth is decided in the plan (complexity versus guarantee).
+**Multi-tenant and roles**: a single middleware filters by `tenant_id`, in the same spirit as DoseCare's `requireRole`. `owner` (everything, members), `manager` (events, exports, Rush), `door` (scan only). A foreign tenant gets 404, never 403. Table-driven test route × role × other tenant that fails when a route has no check. Postgres row-level security (RLS) is out of v1: the single middleware and the matrix test are the isolation guarantees. An ADR records that RLS was considered and rejected (extra complexity: transaction-scoped `SET LOCAL`, non-owner DB role, and the buyer flow crosses tenants), and that the matrix test is what catches a missing filter.
 
 **Door scan**: `POST /scan {code}` verifies the HMAC signature, then `UPDATE tickets SET scanned_at = now() WHERE id = $1 AND scanned_at IS NULL RETURNING`. Zero rows means already scanned, and the response includes the first scan time. Mobile web page using `BarcodeDetector` when available, manual code entry as fallback.
 
@@ -100,11 +100,11 @@ If fewer rows come back than requested: rollback and 409 listing the taken seats
 - One Playwright e2e: demo login, Rush, `oversold` is 0.
 - `npm run bench` with numbers and machine description in the README.
 
-**Infrastructure**: Docker Compose (Postgres, Redis, api, worker, simulator, web), migrations and seed automatic, ports on 127.0.0.1. GitHub Actions with Postgres and Redis services. ADRs: Postgres is the source of truth, waiting room fails open, at-least-once delivery, materialized inventory.
+**Infrastructure**: Docker Compose (Postgres, Redis, api, worker, simulator, web), migrations and seed automatic, ports on 127.0.0.1. GitHub Actions with Postgres and Redis services. ADRs: Postgres is the source of truth, waiting room fails open, at-least-once delivery, materialized inventory, RLS rejected for v1.
 
 ## 8. Known risks
 
 - Streaming XLSX and PDF libraries: behavior confirmed during implementation; fallback is CSV-only streaming plus a bounded XLSX size.
 - Rush throughput on a laptop: the simulator caps concurrency; numbers are reported as measured, not promised.
-- Row-level security: undecided, see section 6.
+- Tenant isolation relies on application code plus the matrix test; no database-level backstop (RLS rejected, see section 6).
 - CI cannot be proven green until the GitHub billing lock is resolved.
