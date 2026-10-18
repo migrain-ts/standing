@@ -1,7 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
 import { asId, generateLayout, type EventId, type SeatId, type SectionId, type TenantId, type UserId, type VenueId } from '@standing/shared';
 import type { Db } from './client';
 import * as s from './schema';
+import { uuidList } from './sql';
 
 export const FIXTURE_NOW = new Date('2026-01-05T08:00:00Z');
 
@@ -72,4 +74,64 @@ export async function insertEventFixture(
     eventId,
     seatIds: seatRows.map((r) => asId<'SeatId'>(r.id) as SeatId),
   };
+}
+
+export async function insertPaidOrder(
+  db: Db,
+  o: { eventId: string; tenantId: string; buyerId: string; seatIds: readonly string[]; at: Date; withOutbox?: boolean },
+): Promise<{ orderId: string; ticketIds: string[] }> {
+  return db.transaction(async (tx) => {
+    const [hold] = await tx
+      .insert(s.holds)
+      .values({ buyerId: o.buyerId, eventId: o.eventId, seatCount: o.seatIds.length, status: 'paid', expiresAt: o.at, createdAt: o.at })
+      .returning({ id: s.holds.id });
+    const priced = await tx.execute(sql`
+      select st.id as seat_id, st.section_id, st.idx, pt.price_cents
+      from seats st join price_tiers pt on pt.section_id = st.section_id and pt.event_id = ${o.eventId}::uuid
+      where st.id = any(${uuidList(o.seatIds)}) order by st.idx`);
+    const total = priced.rows.reduce((n, r) => n + Number(r.price_cents), 0);
+    const orderId = randomUUID();
+    await tx.insert(s.orders).values({
+      id: orderId, buyerId: o.buyerId, eventId: o.eventId, tenantId: o.tenantId, holdId: hold!.id, totalCents: total, createdAt: o.at,
+    });
+    await tx.insert(s.orderItems).values(
+      priced.rows.map((r) => ({ orderId, eventId: o.eventId, seatId: String(r.seat_id), sectionId: String(r.section_id), priceCents: Number(r.price_cents) })),
+    );
+    await tx.execute(sql`
+      insert into tickets (order_item_id, order_id, event_id, seat_id)
+      select id, order_id, event_id, seat_id from order_items where order_id = ${orderId}::uuid`);
+    const sold = await tx.execute(sql`
+      update event_seats set status = 'sold', order_id = ${orderId}::uuid, hold_id = ${hold!.id}::uuid, held_until = null
+      where event_id = ${o.eventId}::uuid and seat_id = any(${uuidList(o.seatIds)}) and status = 'available' returning seat_id`);
+    if (sold.rows.length !== o.seatIds.length) throw new Error('insertPaidOrder: some seats were not available');
+    if (o.withOutbox !== false) {
+      await tx.insert(s.outbox).values({
+        kind: 'ticket.sold', tenantId: o.tenantId, eventId: o.eventId, dedupeKey: `ticket.sold:${orderId}`, createdAt: o.at,
+        payload: {
+          orderId, at: o.at.toISOString(), revenueCents: total,
+          seats: priced.rows.map((r) => ({ seatId: String(r.seat_id), idx: Number(r.idx), sectionId: String(r.section_id), priceCents: Number(r.price_cents) })),
+        },
+      });
+    }
+    const t = await tx.execute(sql`select id from tickets where order_id = ${orderId}::uuid`);
+    return { orderId, ticketIds: t.rows.map((r) => String(r.id)) };
+  });
+}
+
+/** Independent recompute of the rollups from orders and order items. */
+export async function rebuildRollups(db: Db, eventId: string): Promise<void> {
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`delete from sales_by_minute where event_id = ${eventId}::uuid`);
+    await tx.execute(sql`delete from sales_by_section where event_id = ${eventId}::uuid`);
+    await tx.execute(sql`
+      insert into sales_by_minute (event_id, bucket, tickets, revenue_cents)
+      select oi.event_id, date_trunc('minute', o.created_at), count(*)::int, sum(oi.price_cents)
+      from order_items oi join orders o on o.id = oi.order_id
+      where oi.event_id = ${eventId}::uuid and o.status = 'paid' group by 1, 2`);
+    await tx.execute(sql`
+      insert into sales_by_section (event_id, section_id, tickets, revenue_cents)
+      select oi.event_id, oi.section_id, count(*)::int, sum(oi.price_cents)
+      from order_items oi join orders o on o.id = oi.order_id
+      where oi.event_id = ${eventId}::uuid and o.status = 'paid' group by 1, 2`);
+  });
 }
