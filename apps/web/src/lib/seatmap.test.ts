@@ -58,9 +58,10 @@ describe('fitView', () => {
 
 describe('sectionToken', () => {
   it('maps to chart tokens and wraps after five', () => {
-    expect(sectionToken(0)).toBe('--chart-1');
-    expect(sectionToken(4)).toBe('--chart-5');
-    expect(sectionToken(5)).toBe('--chart-1');
+    expect(sectionToken(0)).toBe('--section-1');
+    expect(sectionToken(4)).toBe('--section-5');
+    expect(sectionToken(5)).toBe('--section-1');
+    expect(sectionToken(-1)).toBe('--section-5');
   });
 });
 

@@ -22,7 +22,7 @@ import { remainingSeconds } from '@/lib/countdown';
 import { useMe } from '@/lib/auth';
 import { formatDateTime, formatMoney } from '@/lib/format';
 import { selectionReducer, type SelectionAction } from '@/lib/selection';
-import { sectionToken, statusArray, type Availability, type VenueMap } from '@/lib/seatmap';
+import { FREE_ALPHA, sectionToken, statusArray, type Availability, type VenueMap } from '@/lib/seatmap';
 import { isSellingFast, seatsLabel, takenSeatIds, type EventDetail, type HoldDto, type OrderDto } from '@/lib/storefront';
 import { MAX_SEATS_PER_HOLD } from '@standing/shared';
 
@@ -283,7 +283,7 @@ export default function EventPage() {
                 <ul className="flex flex-wrap gap-x-6 gap-y-2">
                   {event.sections.map((s) => (
                     <li key={s.id} className="flex items-center gap-2 text-sm">
-                      <span aria-hidden className="size-3 rounded-full border border-muted-foreground" style={{ background: `color-mix(in oklab, var(${sectionToken(s.ord)}) 55%, transparent)` }} />
+                      <span aria-hidden className="size-3 rounded-full border border-muted-foreground" style={{ background: `color-mix(in oklab, var(${sectionToken(s.ord)}) ${FREE_ALPHA * 100}%, transparent)` }} />
                       <span className="font-medium">{s.name}</span>
                       <span className="tabular-nums text-muted-foreground">{formatMoney(s.priceCents)}</span>
                     </li>

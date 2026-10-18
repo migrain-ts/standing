@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { formatMoney } from '@/lib/format';
-import { fitView, freeSeatSummary, hitTest, sectionToken, type Status, type VenueMap, type View } from '@/lib/seatmap';
+import { FREE_ALPHA, SECTION_COLOURS, fitView, freeSeatSummary, hitTest, sectionToken, type Status, type VenueMap, type View } from '@/lib/seatmap';
 
 const RADIUS = 7;
 
@@ -67,7 +67,9 @@ export function SeatMap({ map, status, priceByOrd, onToggle, variant }: Props) {
     const bounds = new Map<number, { min: number; max: number }>();
     let minX = Infinity;
     let maxX = -Infinity;
+    let minY = Infinity;
     for (const s of map.seats) {
+      minY = Math.min(minY, s[1]);
       minX = Math.min(minX, s[0]);
       maxX = Math.max(maxX, s[0]);
       const b = bounds.get(s[2]) ?? { min: s[0], max: s[0] };
@@ -76,18 +78,24 @@ export function SeatMap({ map, status, priceByOrd, onToggle, variant }: Props) {
       bounds.set(s[2], b);
     }
     if (map.seats.length > 0) {
+      // Labels and the stage sit a fixed screen distance above the first row so they never collide at small scales.
+      const rowTop = minY * v.scale + v.offsetY - r;
+      const labelY = rowTop - 8;
+      const stageH = 22;
+      const stageY = labelY - 14 - stageH;
       ctx.fillStyle = colour('--muted');
-      ctx.fillRect(minX * v.scale + v.offsetX - r, 8 * v.scale + v.offsetY, (maxX - minX) * v.scale + 2 * r, 30 * v.scale);
+      ctx.fillRect(minX * v.scale + v.offsetX - r, stageY, (maxX - minX) * v.scale + 2 * r, stageH);
       ctx.fillStyle = colour('--muted-foreground');
-      ctx.font = `600 ${Math.max(11, 12 * v.scale)}px ui-sans-serif, system-ui, sans-serif`;
+      ctx.font = '600 11px ui-sans-serif, system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('STAGE', ((minX + maxX) / 2) * v.scale + v.offsetX, 23 * v.scale + v.offsetY);
+      ctx.fillText('STAGE', ((minX + maxX) / 2) * v.scale + v.offsetX, stageY + stageH / 2);
       ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
       for (const sec of map.sections) {
         const b = bounds.get(sec.ord);
         if (!b) continue;
-        ctx.fillText(sec.name, b.min * v.scale + v.offsetX - r, 58 * v.scale + v.offsetY);
+        ctx.fillText(sec.name, b.min * v.scale + v.offsetX - r, labelY);
       }
     }
 
@@ -97,7 +105,7 @@ export function SeatMap({ map, status, priceByOrd, onToggle, variant }: Props) {
     const ring = colour('--ring');
     const mine = colour('--foreground');
     const outline = colour('--muted-foreground');
-    const free = [0, 1, 2, 3, 4].map((i) => colour(`--chart-${i + 1}`));
+    const free = Array.from({ length: SECTION_COLOURS }, (_, i) => colour(sectionToken(i)));
     const selected: number[] = [];
     for (let i = 0; i < map.seats.length; i++) {
       const seat = map.seats[i];
@@ -109,15 +117,17 @@ export function SeatMap({ map, status, priceByOrd, onToggle, variant }: Props) {
       ctx.beginPath();
       switch (s) {
         case 'free':
-          ctx.globalAlpha = 0.55;
-          ctx.fillStyle = free[Number(sectionToken(seat[2]).slice(-1)) - 1] ?? primary;
+          ctx.globalAlpha = FREE_ALPHA;
+          ctx.fillStyle = free[((seat[2] % SECTION_COLOURS) + SECTION_COLOURS) % SECTION_COLOURS] ?? primary;
           ctx.arc(x, y, r, 0, Math.PI * 2);
           ctx.fill();
-          // The 55% section fill alone is below 3:1 on the card, so every free seat also gets a full-strength outline.
-          ctx.globalAlpha = 1;
-          ctx.lineWidth = 1;
-          ctx.strokeStyle = outline;
-          ctx.stroke();
+          // The 55% section fill alone is below 3:1 on the card, so free seats also get a full-strength outline once they are big enough (below 4 px radius it would swamp the fill).
+          if (r >= 4) {
+            ctx.globalAlpha = 1;
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = outline;
+            ctx.stroke();
+          }
           break;
         case 'held':
           ctx.globalAlpha = 0.35;

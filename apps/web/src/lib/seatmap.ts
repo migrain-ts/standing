@@ -70,9 +70,13 @@ export function fitView(map: Pick<VenueMap, 'seats'>, width: number, height: num
   };
 }
 
-/** Sections differ only by a chart token (lightness step), wrapping after five. */
+/** Opacity of a free seat's section colour (the 1px outline stays at full strength). */
+export const FREE_ALPHA = 0.75;
+export const SECTION_COLOURS = 5;
+
+/** Categorical section token (`--section-1` to `--section-5`), wrapping after five sections. */
 export function sectionToken(ord: number): string {
-  return `--chart-${(((ord % 5) + 5) % 5) + 1}`;
+  return `--section-${(((ord % SECTION_COLOURS) + SECTION_COLOURS) % SECTION_COLOURS) + 1}`;
 }
 
 /** Free seats grouped by section and row, as "1-3, 5" ranges: the text twin of the canvas. */
