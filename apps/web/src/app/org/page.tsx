@@ -24,7 +24,7 @@ export default function OrgIndexPage() {
   const target = me.isSuccess ? pickDefaultTenant(organizing, readStoredTenant()) : null;
 
   useEffect(() => {
-    if (target) router.replace(`/org/${target}`);
+    if (target) router.replace(orgPath(target));
   }, [target, router]);
 
   const create = useMutation({
