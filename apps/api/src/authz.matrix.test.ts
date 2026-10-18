@@ -33,6 +33,9 @@ export const MATRIX: Row[] = [
   { method: 'POST', pattern: '/tenants/:tenantId/events/:eventId/reports', min: 'manager', url: (f) => `/tenants/${f.tenantId}/events/${f.eventId}/reports`, body: { kind: 'report_pdf' } },
   { method: 'GET', pattern: '/tenants/:tenantId/events/:eventId/live/snapshot', min: 'manager', url: (f) => `/tenants/${f.tenantId}/events/${f.eventId}/live/snapshot` },
   { method: 'GET', pattern: '/tenants/:tenantId/events/:eventId/live', min: 'manager', url: (f) => `/tenants/${f.tenantId}/events/${f.eventId}/live` },
+  { method: 'GET', pattern: '/tenants/:tenantId/exports/sales.csv', min: 'manager', url: (f) => `/tenants/${f.tenantId}/exports/sales.csv` },
+  { method: 'GET', pattern: '/tenants/:tenantId/exports/sales.xlsx', min: 'manager', url: (f) => `/tenants/${f.tenantId}/exports/sales.xlsx` },
+  { method: 'GET', pattern: '/tenants/:tenantId/overview', min: 'manager', url: (f) => `/tenants/${f.tenantId}/overview` },
 ];
 
 /** Routes that need a session but no tenant role. They must answer 401 anonymously. */

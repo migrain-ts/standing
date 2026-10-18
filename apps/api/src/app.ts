@@ -10,6 +10,8 @@ import { tenantRoutes } from './routes/tenants';
 import { doorRoutes } from './routes/door';
 import { documentRoutes } from './routes/documents';
 import { eventRoutes } from './routes/events';
+import { exportRoutes } from './routes/exports';
+import { overviewRoutes } from './routes/overview';
 import { holdRoutes } from './routes/holds';
 import { orderRoutes } from './routes/orders';
 import { publicRoutes } from './routes/public';
@@ -96,7 +98,9 @@ export function createAppWithServices(deps: Deps, opts: AppOptions = {}) {
     .route('/', orderRoutes(deps))
     .route('/', documentRoutes())
     .route('/', doorRoutes())
-    .route('/', liveRoutes());
+    .route('/', liveRoutes())
+    .route('/', exportRoutes())
+    .route('/', overviewRoutes());
   return { app, svc };
 }
 

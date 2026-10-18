@@ -69,3 +69,20 @@ export type ScanInput = z.infer<typeof scanSchema>;
 
 export const reportRequestSchema = z.object({ kind: z.literal('report_pdf') });
 export type ReportRequestInput = z.infer<typeof reportRequestSchema>;
+
+const isoDay = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected an ISO date (YYYY-MM-DD)')
+  .refine((s) => {
+    const d = new Date(`${s}T00:00:00Z`);
+    return !Number.isNaN(d.getTime()) && d.toISOString().startsWith(s);
+  }, 'Not a calendar date');
+export const MAX_EXPORT_RANGE_DAYS = 366;
+/** Query of the sales exports. `from` and `to` are inclusive UTC days. */
+export const exportQuerySchema = z
+  .object({ from: isoDay.optional(), to: isoDay.optional(), eventId: uuid.optional() })
+  .refine(
+    (q) => !q.from || !q.to || (Date.parse(q.to) - Date.parse(q.from)) / 86_400_000 <= MAX_EXPORT_RANGE_DAYS,
+    { message: `The range is at most ${MAX_EXPORT_RANGE_DAYS} days`, path: ['to'] },
+  );
+export type ExportQuery = z.infer<typeof exportQuerySchema>;
