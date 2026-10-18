@@ -45,7 +45,7 @@ Local ports (verified free on 2026-10-18, bound to 127.0.0.1): Postgres 5441, Re
 - Events: `events` (venue, starts_at, status), `price_tiers` (price per section per event).
 - Inventory: `event_seats(event_id, seat_id, status, held_until, hold_id, order_id)`, status `available | held | sold`. One row per seat per event, created at publication. A 5,000-seat venue means 5,000 rows per event, which is small for Postgres and keeps the locking easy to prove.
 - Holds: `holds(id, buyer_id, event_id, expires_at)`.
-- Orders: `orders` (`pending | paid | cancelled`), `order_items` with a unique constraint on `event_seat_id`, `tickets` (HMAC-signed QR code, `scanned_at`).
+- Orders: `orders` (`paid | cancelled`; an order exists only after a successful payment, the hold is the pending state), `order_items` with a unique constraint on `event_seat_id`, `tickets` (HMAC-signed QR code, `scanned_at`).
 - Outbox: `outbox(kind, payload, dedupe_key)`, written in the same transaction as the change it describes (sales, scans).
 - Rollups: `sales_by_minute(event_id, bucket, tickets, revenue)`, `sales_by_section`, plus a materialized view per event for reports.
 - Every business row carries `tenant_id`.
