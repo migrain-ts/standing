@@ -6,6 +6,7 @@ import { authRoutes } from './auth/routes';
 import { errorHandler } from './errors';
 import { tenantRoutes } from './routes/tenants';
 import { eventRoutes } from './routes/events';
+import { holdRoutes } from './routes/holds';
 import { publicRoutes } from './routes/public';
 import { queueRoutes } from './routes/queue';
 import { venueRoutes } from './routes/venues';
@@ -55,7 +56,8 @@ export function createApp(deps: Deps) {
     .route('/', venueRoutes())
     .route('/', eventRoutes())
     .route('/', publicRoutes())
-    .route('/', queueRoutes(deps));
+    .route('/', queueRoutes(deps))
+    .route('/', holdRoutes(deps));
 }
 
 export type AppType = ReturnType<typeof createApp>;

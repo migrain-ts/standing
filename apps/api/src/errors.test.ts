@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { errorHandler } from './errors';
+import { ApiError, errorHandler } from './errors';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -44,5 +44,20 @@ describe('errorHandler (500)', () => {
     const out = lines.join('\n');
     expect(out).not.toContain('hunter2-hash');
     expect(out).toContain('TypeError');
+  });
+});
+
+describe('errorHandler (ApiError)', () => {
+  const appWith = (err: ApiError) => new Hono().onError(errorHandler).get('/x', () => { throw err; });
+
+  it('serializes details when present', async () => {
+    const res = await appWith(new ApiError(409, 'seats_unavailable', 'Taken', { taken: ['a'] })).request('/x');
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: { code: 'seats_unavailable', message: 'Taken', details: { taken: ['a'] } } });
+  });
+
+  it('has exactly code and message without details', async () => {
+    const res = await appWith(new ApiError(404, 'not_found', 'Nope')).request('/x');
+    expect(Object.keys(((await res.json()) as { error: object }).error).sort()).toEqual(['code', 'message']);
   });
 });

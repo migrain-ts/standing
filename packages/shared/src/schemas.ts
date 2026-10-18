@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { DEMO_USERS, MAX_SEATS_PER_VENUE } from './constants';
+import { DEMO_USERS, MAX_SEATS_PER_HOLD, MAX_SEATS_PER_VENUE } from './constants';
 import { UUID_RE } from './ids';
 
 const email = z.string().trim().toLowerCase().email();
@@ -54,3 +54,12 @@ export const tiersSchema = z
 export type EventCreateInput = z.infer<typeof eventCreateSchema>;
 export type EventUpdateInput = z.infer<typeof eventUpdateSchema>;
 export type TiersInput = z.infer<typeof tiersSchema>;
+
+export const holdCreateSchema = z.object({
+  seatIds: z
+    .array(z.string().regex(UUID_RE, 'Expected a UUID'))
+    .min(1)
+    .max(MAX_SEATS_PER_HOLD)
+    .refine((ids) => new Set(ids.map((i) => i.toLowerCase())).size === ids.length, 'Duplicate seat'),
+});
+export type HoldCreateInput = z.infer<typeof holdCreateSchema>;

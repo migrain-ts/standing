@@ -6,6 +6,7 @@ export class ApiError extends Error {
     public status: 400 | 401 | 402 | 403 | 404 | 409 | 410 | 429 | 503,
     public code: string,
     message?: string,
+    public details?: Record<string, unknown>,
   ) {
     super(message ?? code);
   }
@@ -13,7 +14,7 @@ export class ApiError extends Error {
 
 export const errorHandler: ErrorHandler = (err, c) => {
   if (err instanceof ApiError) {
-    return c.json({ error: { code: err.code, message: err.message } }, err.status);
+    return c.json({ error: { code: err.code, message: err.message, ...(err.details ? { details: err.details } : {}) } }, err.status);
   }
   if (err instanceof HTTPException) {
     const codes: Record<number, string> = { 400: 'invalid_request', 401: 'unauthenticated', 403: 'forbidden', 404: 'not_found', 413: 'payload_too_large' };
