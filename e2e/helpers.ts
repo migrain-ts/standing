@@ -63,12 +63,13 @@ export async function buyTickets(
   buyer: APIRequestContext,
   eventId: string,
   count: number,
+  offset = 0,
 ): Promise<{ id: string; documentId: string | null; tickets: { id: string; code: string }[] }> {
   const map = await json<{ seatIds: string[] }>(await buyer.get(`/api/public/events/${eventId}/map`));
-  const seatIds = map.seatIds.slice(0, count);
+  const seatIds = map.seatIds.slice(offset, offset + count);
   // The waiting room admits the first buyers at once on a quiet event; the ticket then travels in a header.
   const joined = await json<{ ticket?: string; state?: string }>(await buyer.post(`/api/public/events/${eventId}/queue`));
-  const gate = joined.ticket ? { 'x-queue-ticket': joined.ticket } : {};
+  const gate: Record<string, string> = joined.ticket ? { 'x-queue-ticket': joined.ticket } : {};
   const { hold } = await json<{ hold: { id: string } }>(
     await buyer.post(`/api/public/events/${eventId}/holds`, { data: { seatIds }, headers: gate }),
   );

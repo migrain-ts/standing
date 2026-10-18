@@ -15,7 +15,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "e2e": "playwright test",
-    "bench": "npm run bench -w @standing/simulator"
+    "bench": "npm run bench -w @standing/simulator",
+    "media": "tsx scripts/record-media.ts"
   },
   "devDependencies": {
     "@playwright/test": "1.64.1",
