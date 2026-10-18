@@ -14,6 +14,8 @@ type Props = {
   priceByOrd: ReadonlyMap<number, number>;
   onToggle: (idx: number) => void;
   variant: 'buyer' | 'organizer';
+  /** Seat idx that just sold (organizer live view): painted with --primary until removed from the set. */
+  flash?: ReadonlySet<number>;
 };
 
 type Hover = { idx: number; x: number; y: number };
@@ -31,19 +33,21 @@ function makeResolver(probe: HTMLElement) {
   };
 }
 
-export function SeatMap({ map, status, priceByOrd, onToggle, variant }: Props) {
+export function SeatMap({ map, status, priceByOrd, onToggle, variant, flash }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewRef = useRef<View>({ scale: 1, offsetX: 0, offsetY: 0 });
   const sizeRef = useRef({ w: 0, h: 0 });
   const frameRef = useRef(0);
   const statusRef = useRef(status);
+  const flashRef = useRef(flash);
   const hoverRef = useRef<number | null>(null);
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const gesture = useRef({ moved: 0, pinch: 0 });
   const [hover, setHover] = useState<Hover | null>(null);
 
   statusRef.current = status;
+  flashRef.current = flash;
 
   const draw = useCallback(() => {
     frameRef.current = 0;
@@ -117,6 +121,15 @@ export function SeatMap({ map, status, priceByOrd, onToggle, variant }: Props) {
       ctx.beginPath();
       switch (s) {
         case 'free':
+          if (variant === 'organizer') {
+            // Organizer view: unsold seats are quiet outlines so the sold seats (section colour) carry the picture.
+            ctx.globalAlpha = 1;
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = outline;
+            ctx.arc(x, y, r * 0.7, 0, Math.PI * 2);
+            ctx.stroke();
+            break;
+          }
           ctx.globalAlpha = FREE_ALPHA;
           ctx.fillStyle = free[((seat[2] % SECTION_COLOURS) + SECTION_COLOURS) % SECTION_COLOURS] ?? primary;
           ctx.arc(x, y, r, 0, Math.PI * 2);
@@ -137,8 +150,13 @@ export function SeatMap({ map, status, priceByOrd, onToggle, variant }: Props) {
           break;
         case 'sold':
           ctx.globalAlpha = 1;
-          ctx.fillStyle = sold;
-          ctx.arc(x, y, r * 0.5, 0, Math.PI * 2);
+          if (variant === 'organizer') {
+            ctx.fillStyle = free[((seat[2] % SECTION_COLOURS) + SECTION_COLOURS) % SECTION_COLOURS] ?? primary;
+            ctx.arc(x, y, r * 0.85, 0, Math.PI * 2);
+          } else {
+            ctx.fillStyle = sold;
+            ctx.arc(x, y, r * 0.5, 0, Math.PI * 2);
+          }
           ctx.fill();
           break;
         case 'mine':
@@ -157,6 +175,24 @@ export function SeatMap({ map, status, priceByOrd, onToggle, variant }: Props) {
       }
     }
     ctx.globalAlpha = 1;
+    const flashing = flashRef.current;
+    if (flashing && flashing.size > 0) {
+      for (const i of flashing) {
+        const seat = map.seats[i];
+        if (!seat) continue;
+        const x = seat[0] * v.scale + v.offsetX;
+        const y = seat[1] * v.scale + v.offsetY;
+        ctx.beginPath();
+        ctx.arc(x, y, r * 1.25, 0, Math.PI * 2);
+        ctx.fillStyle = primary;
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = ring;
+        ctx.beginPath();
+        ctx.arc(x, y, r * 1.25 + 2, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
     // Selected seats last so the ring is never covered by a neighbour.
     for (const i of selected) {
       const seat = map.seats[i];
@@ -173,7 +209,7 @@ export function SeatMap({ map, status, priceByOrd, onToggle, variant }: Props) {
       ctx.arc(x, y, r + 2.5, 0, Math.PI * 2);
       ctx.stroke();
     }
-  }, [map]);
+  }, [map, variant]);
 
   const schedule = useCallback(() => {
     if (frameRef.current === 0) frameRef.current = requestAnimationFrame(draw);
@@ -211,7 +247,7 @@ export function SeatMap({ map, status, priceByOrd, onToggle, variant }: Props) {
 
   useEffect(() => {
     schedule();
-  }, [status, schedule]);
+  }, [status, flash, schedule]);
 
   const zoomAt = (px: number, py: number, factor: number) => {
     const v = viewRef.current;
@@ -309,9 +345,13 @@ export function SeatMap({ map, status, priceByOrd, onToggle, variant }: Props) {
         <span data-probe aria-hidden className="pointer-events-none absolute size-0 opacity-0" />
         <canvas
           ref={canvasRef}
-          className="absolute inset-0 size-full touch-none cursor-pointer"
+          className={`absolute inset-0 size-full touch-none ${variant === 'organizer' ? 'cursor-default' : 'cursor-pointer'}`}
           role="img"
-          aria-label={`${variant === 'organizer' ? 'Venue' : 'Seat'} map, ${free} free seats. Scroll to zoom, drag to pan. Use Best available to choose seats with the keyboard.`}
+          aria-label={
+            variant === 'organizer'
+              ? `Live venue map, ${free} unsold seats. Scroll to zoom, drag to pan.`
+              : `Seat map, ${free} free seats. Scroll to zoom, drag to pan. Use Best available to choose seats with the keyboard.`
+          }
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
