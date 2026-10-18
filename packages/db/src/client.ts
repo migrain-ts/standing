@@ -3,6 +3,7 @@ import { Pool } from 'pg';
 import * as schema from './schema';
 
 export type Db = NodePgDatabase<typeof schema>;
+export type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
 export function createDb(url: string, log: (line: string) => void = console.error): { db: Db; pool: Pool } {
   const pool = new Pool({ connectionString: url });

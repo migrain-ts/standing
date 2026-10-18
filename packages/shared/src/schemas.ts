@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { DEMO_USERS, MAX_SEATS_PER_VENUE } from './constants';
+import { UUID_RE } from './ids';
 
 const email = z.string().trim().toLowerCase().email();
 
@@ -32,3 +33,20 @@ export const venueCreateSchema = z
     path: ['sections'],
   });
 export type VenueCreateInput = z.infer<typeof venueCreateSchema>;
+
+const uuid = z.string().regex(UUID_RE, 'Expected a UUID');
+export const eventCreateSchema = z.object({
+  venueId: uuid,
+  name: z.string().trim().min(1).max(120),
+  startsAt: z.coerce.date(),
+  admissionLimit: z.number().int().min(0).max(2000).default(200),
+});
+export const eventUpdateSchema = eventCreateSchema.omit({ venueId: true }).partial();
+export const tiersSchema = z
+  .array(z.object({ sectionId: uuid, priceCents: z.number().int().min(0).max(1_000_000) }))
+  .min(1)
+  .max(12)
+  .refine((t) => new Set(t.map((x) => x.sectionId.toLowerCase())).size === t.length, 'Duplicate section');
+export type EventCreateInput = z.infer<typeof eventCreateSchema>;
+export type EventUpdateInput = z.infer<typeof eventUpdateSchema>;
+export type TiersInput = z.infer<typeof tiersSchema>;

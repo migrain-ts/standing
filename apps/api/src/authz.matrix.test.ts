@@ -4,13 +4,15 @@ import { createApp } from './app';
 import { makeTenantFixture, type TenantFixture } from './fixtures';
 import { call, makeApp, type TestApp } from './test-helpers';
 
+type Body = Record<string, unknown> | unknown[];
 type Row = {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   pattern: string;
   min: TenantRoleName;
   url: (f: TenantFixture) => string;
-  body?: unknown;
+  body?: Body | ((f: TenantFixture) => Body);
 };
+const bodyOf = (row: Row, f: TenantFixture) => (typeof row.body === 'function' ? row.body(f) : row.body);
 
 // Every route under /tenants/:tenantId/* MUST have a row here. Later tasks append their rows.
 export const MATRIX: Row[] = [
@@ -21,6 +23,13 @@ export const MATRIX: Row[] = [
   { method: 'GET', pattern: '/tenants/:tenantId/venues', min: 'manager', url: (f) => `/tenants/${f.tenantId}/venues` },
   { method: 'POST', pattern: '/tenants/:tenantId/venues', min: 'manager', url: (f) => `/tenants/${f.tenantId}/venues`, body: { name: 'V', sections: [{ name: 'A', rows: 1, seatsPerRow: 2 }] } },
   { method: 'GET', pattern: '/tenants/:tenantId/venues/:venueId', min: 'manager', url: (f) => `/tenants/${f.tenantId}/venues/${f.venueId}` },
+  { method: 'GET', pattern: '/tenants/:tenantId/events', min: 'manager', url: (f) => `/tenants/${f.tenantId}/events` },
+  { method: 'POST', pattern: '/tenants/:tenantId/events', min: 'manager', url: (f) => `/tenants/${f.tenantId}/events`, body: (f) => ({ venueId: f.venueId, name: 'E', startsAt: '2027-01-01T20:00:00Z' }) },
+  { method: 'GET', pattern: '/tenants/:tenantId/events/:eventId', min: 'manager', url: (f) => `/tenants/${f.tenantId}/events/${f.eventId}` },
+  { method: 'PATCH', pattern: '/tenants/:tenantId/events/:eventId', min: 'manager', url: (f) => `/tenants/${f.tenantId}/events/${f.draftEventId}`, body: { name: 'Renamed' } },
+  { method: 'PUT', pattern: '/tenants/:tenantId/events/:eventId/tiers', min: 'manager', url: (f) => `/tenants/${f.tenantId}/events/${f.draftEventId}/tiers`, body: (f) => [{ sectionId: f.sectionId, priceCents: 1000 }] },
+  { method: 'POST', pattern: '/tenants/:tenantId/events/:eventId/publish', min: 'manager', url: (f) => `/tenants/${f.tenantId}/events/${f.draftEventId}/publish` },
+  { method: 'POST', pattern: '/tenants/:tenantId/events/:eventId/close', min: 'manager', url: (f) => `/tenants/${f.tenantId}/events/${f.eventId}/close` },
 ];
 
 /** Routes that need a session but no tenant role. They must answer 401 anonymously. */
@@ -28,7 +37,10 @@ export const AUTHED_ROUTES = new Set(['POST /auth/logout', 'GET /auth/me', 'GET 
 /** Routes whose authorization is a row-level check inside the handler (own orders, door scan, ...). Later tasks add theirs. */
 export const SELF_CHECKED_ROUTES = new Set<string>();
 /** Routes open to everyone. */
-export const PUBLIC_ROUTES = new Set(['POST /auth/register', 'POST /auth/login', 'POST /auth/demo']);
+export const PUBLIC_ROUTES = new Set([
+  'POST /auth/register', 'POST /auth/login', 'POST /auth/demo',
+  'GET /public/events', 'GET /public/events/:eventId', 'GET /public/events/:eventId/map', 'GET /public/events/:eventId/availability',
+]);
 
 const rank: Record<TenantRoleName, number> = { door: 1, manager: 2, owner: 3 };
 let t: TestApp;
@@ -74,16 +86,16 @@ for (const row of MATRIX) {
   describe(`${row.method} ${row.pattern}`, () => {
     it('401 when anonymous', async () => {
       const f = await makeTenantFixture(t);
-      expect((await call(t.app, null, row.method, row.url(f), row.body)).status).toBe(401);
+      expect((await call(t.app, null, row.method, row.url(f), bodyOf(row, f))).status).toBe(401);
     });
     it('404 for a member of another tenant (never 403)', async () => {
       const f = await makeTenantFixture(t);
-      expect((await call(t.app, f.outsider.cookie, row.method, row.url(f), row.body)).status).toBe(404);
+      expect((await call(t.app, f.outsider.cookie, row.method, row.url(f), bodyOf(row, f))).status).toBe(404);
     });
     for (const role of ['door', 'manager', 'owner'] as const) {
       it(`${role}: ${rank[role] < rank[row.min] ? '403' : 'allowed'}`, async () => {
         const f = await makeTenantFixture(t);
-        const res = await call(t.app, f[role].cookie, row.method, row.url(f), row.body);
+        const res = await call(t.app, f[role].cookie, row.method, row.url(f), bodyOf(row, f));
         if (rank[role] < rank[row.min]) expect(res.status).toBe(403);
         else {
           expect([401, 403]).not.toContain(res.status);

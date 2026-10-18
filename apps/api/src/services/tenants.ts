@@ -1,9 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { and, eq, sql } from 'drizzle-orm';
-import { schema, type Db, type TenantRole } from '@standing/db';
+import { schema, type Db, type Tx, type TenantRole } from '@standing/db';
 import { ApiError } from '../errors';
-
-type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
 const slugify = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
 
