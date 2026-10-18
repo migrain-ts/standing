@@ -58,9 +58,9 @@ export function startRush(deps: RushDeps, params: RushParams): Rush {
   async function main(): Promise<void> {
     const tokens = await createSimulatedBuyers(deps.db, id, params.buyers, now());
     const mapClient = createApiClient(deps.apiUrl, tokens[0] ?? '', stats.request);
-    const mapRes = await mapClient.get(`/public/events/${params.eventId}/map`, abort.signal);
-    const map = mapBody.parse(mapRes.body);
+    const mapRes = await mapClient.get(`/public/events/${encodeURIComponent(params.eventId)}/map`, abort.signal);
     if (mapRes.status !== 200) throw new Error(`map request failed with ${mapRes.status}`);
+    const map = mapBody.parse(mapRes.body);
 
     const startedAtMs = performance.now();
     const flows = tokens.map(async (token) => {

@@ -95,6 +95,32 @@ describe('rush simulator', () => {
     expect(status).toBe('stopped');
   }, 120_000);
 
+  it('enforces the HTTP bounds on buyers, seats per buyer and duration', async () => {
+    const fx = await insertEventFixture(t.db, { rows: 1, seatsPerRow: 2 });
+    const sim = createSimulatorServer({ token: 'secret', apiUrl, db: t.db });
+    const headers = { 'x-simulator-token': 'secret', 'content-type': 'application/json' };
+    const post = (over: { buyers?: number; maxSeatsPerBuyer?: number; durationSeconds?: number }) =>
+      sim.request('/runs', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ eventId: fx.eventId, buyers: 1, maxSeatsPerBuyer: 1, durationSeconds: 5, ...over }),
+      });
+    for (const bad of [{ buyers: 0 }, { buyers: 5001 }, { maxSeatsPerBuyer: 0 }, { maxSeatsPerBuyer: 5 }, { durationSeconds: 4 }, { durationSeconds: 301 }])
+      expect((await post(bad)).status, JSON.stringify(bad)).toBe(400);
+    // exact boundaries: the first is accepted, later ones hit the running rush for the same event
+    const low = await post({ buyers: 1, maxSeatsPerBuyer: 1, durationSeconds: 5 });
+    expect(low.status).toBe(202);
+    for (const edge of [{ buyers: 5000 }, { maxSeatsPerBuyer: 4 }, { durationSeconds: 300 }])
+      expect((await post(edge)).status, JSON.stringify(edge)).toBe(409);
+    const { id } = (await low.json()) as { id: string };
+    await sim.request(`/runs/${id}`, { method: 'DELETE', headers });
+    for (let i = 0; i < 50; i++) {
+      const got = await sim.request(`/runs/${id}`, { headers });
+      if (((await got.json()) as { stats: { status: string } }).stats.status !== 'running') break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  });
+
   it('refuses requests without the simulator token', async () => {
     const sim = createSimulatorServer({ token: 'secret', apiUrl, db: t.db });
     expect((await sim.request('/runs', { method: 'POST', body: '{}' })).status).toBe(401);

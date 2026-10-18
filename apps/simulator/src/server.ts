@@ -1,9 +1,17 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
 import type { Db } from '@standing/db';
-import type { Clock } from '@standing/shared';
+import { MAX_RUSH_BUYERS, type Clock } from '@standing/shared';
 import { rushParamsSchema, startRush, type Rush } from './run';
 
 export type SimulatorDeps = { token: string; apiUrl: string; db: Db; clock?: Clock };
+
+/** Limits for requests over HTTP; direct startRush calls (tests) may go below them. */
+const httpParamsSchema = rushParamsSchema.extend({
+  buyers: z.number().int().min(1).max(MAX_RUSH_BUYERS),
+  maxSeatsPerBuyer: z.number().int().min(1).max(4),
+  durationSeconds: z.number().min(5).max(300),
+});
 
 const err = (code: string, message: string) => ({ error: { code, message } });
 
@@ -19,7 +27,7 @@ export function createSimulatorServer(deps: SimulatorDeps): Hono {
     })
     .post('/runs', async (c) => {
       const raw: unknown = await c.req.json().catch(() => null);
-      const parsed = rushParamsSchema.safeParse(raw);
+      const parsed = httpParamsSchema.safeParse(raw);
       if (!parsed.success) return c.json(err('invalid_request', parsed.error.message), 400);
       const params = parsed.data;
       const prev = runs.get(latestByEvent.get(params.eventId) ?? '');
