@@ -25,6 +25,14 @@ test('door staff admit a ticket once and reject repeats and garbage', async ({ p
   await field.fill('STD1.garbage');
   await page.getByRole('button', { name: 'Check' }).click();
   await expect(result).toContainText('Not a valid ticket');
+
+  // A valid ticket of another event of the same tenant is refused at this door.
+  const other = await createFreshEvent(organizer, { label: 'Other Night' });
+  const otherCode = (await buyTickets(buyer, other.eventId, 1)).tickets[0]?.code;
+  if (!otherCode) throw new Error('second order has no ticket code');
+  await field.fill(otherCode);
+  await page.getByRole('button', { name: 'Check' }).click();
+  await expect(result).toContainText('Wrong event');
   await organizer.dispose();
   await buyer.dispose();
 });

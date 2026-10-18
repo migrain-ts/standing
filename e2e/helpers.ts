@@ -58,6 +58,20 @@ export async function createFreshEvent(
   return { tenantId: tenant.id, eventId: event.id, name, capacity: venue.seatCount };
 }
 
+/** Moves a keyboard-driven slider to `target` (Home, then ArrowRight until it reaches or stops moving). */
+export async function setSlider(page: Page, name: string, target: number): Promise<void> {
+  const slider = page.getByRole('slider', { name });
+  await slider.focus();
+  await slider.press('Home');
+  for (let v = Number(await slider.getAttribute('aria-valuenow')); v < target; ) {
+    await slider.press('ArrowRight');
+    const next = Number(await slider.getAttribute('aria-valuenow'));
+    if (next === v) break;
+    v = next;
+  }
+  await expect(slider).toHaveAttribute('aria-valuenow', String(target));
+}
+
 /** Holds `count` seats of a published event as the buyer and pays; returns the order with its tickets. */
 export async function buyTickets(
   buyer: APIRequestContext,

@@ -1,3 +1,4 @@
+// LOCAL PATCH (see DropdownMenuContent: popup element tracked in state so the open-state observer attaches); `shadcn add -o` reverts it.
 "use client"
 
 import * as React from "react"
