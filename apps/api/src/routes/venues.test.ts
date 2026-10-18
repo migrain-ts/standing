@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { sql } from 'drizzle-orm';
 import { makeTenantFixture } from '../fixtures';
+import { createVenue, loadVenueMap } from '../services/venues';
 import { call, makeApp, type TestApp } from '../test-helpers';
 
 let t: TestApp;
@@ -39,7 +40,22 @@ describe('venues', () => {
   });
   it('hides a venue of another tenant even when the caller uses their own tenant id', async () => {
     const f = await makeTenantFixture(t);
+    const ok = await call(t.app, f.manager.cookie, 'GET', `/tenants/${f.tenantId}/venues/${f.venueId}`);
+    expect(ok.status).toBe(200);
+    expect(((await ok.json()) as { venue: { id: string } }).venue.id).toBe(f.venueId);
     const res = await call(t.app, f.outsider.cookie, 'GET', `/tenants/${f.outsiderTenantId}/venues/${f.venueId}`);
     expect(res.status).toBe(404);
+  });
+  it('answers 404 for a venue id that is not a uuid', async () => {
+    const f = await makeTenantFixture(t);
+    expect((await call(t.app, f.manager.cookie, 'GET', `/tenants/${f.tenantId}/venues/not-a-uuid`)).status).toBe(404);
+  });
+  it('loadVenueMap returns seatIds parallel to seats, ordered by idx', async () => {
+    const f = await makeTenantFixture(t);
+    const v = await createVenue(t.db, { tenantId: f.tenantId, ...body });
+    const map = await loadVenueMap(t.db, v.id);
+    const ordered = await t.db.execute(sql`select id from seats where venue_id = ${v.id}::uuid order by idx`);
+    expect(map.seatIds.length).toBe(map.seats.length);
+    expect(map.seatIds).toEqual(ordered.rows.map((r) => String(r.id)));
   });
 });
