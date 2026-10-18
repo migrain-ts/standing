@@ -26,13 +26,13 @@ Out: real payments, refunds, emails, i18n, native mobile app, anti-bot, ClickHou
 apps/api         Hono + Zod + OpenAPI; buyer, organizer and door surfaces; SSE
 apps/worker      BullMQ consumer: ticket and report PDFs, outbox projection, hold cleanup
 apps/simulator   load generator: virtual buyers making real HTTP calls
-apps/web         Next.js + Ant Design + Tailwind: storefront, console, scan page
+apps/web         Next.js + shadcn/ui + Tailwind (Pulse design system): storefront, console, scan page
 packages/db      Drizzle schema, migrations, client
 packages/shared  Zod schemas, branded ids, shared types
 docker-compose.yml, .env.example, docs/adr/, docs/ARCHITECTURE.md
 ```
 
-Stack: TypeScript everywhere (strict; `typescript-pro` guidance applies: branded ids for seats, holds, orders and tickets; discriminated unions for hold and order states; Zod schemas shared by API and web; no tRPC unless decided later), Hono, Drizzle, Zod, PostgreSQL, Redis, BullMQ, Next.js App Router, Ant Design with the Tailwind layer order used in DoseCare, exceljs (streaming), a PDF library chosen in the plan, Vitest, Playwright.
+Stack: TypeScript everywhere (strict; `typescript-pro` guidance applies: branded ids for seats, holds, orders and tickets; discriminated unions for hold and order states; Zod schemas shared by API and web; no tRPC unless decided later), Hono, Drizzle, Zod, PostgreSQL, Redis, BullMQ, Next.js App Router, shadcn/ui (Base UI) with the Pulse design system from Better Design and MingCute icons (decided 2026-10-18; Ant Design dropped because the catalog systems are shadcn-native), exceljs (streaming), a PDF library chosen in the plan, Vitest, Playwright.
 
 Local ports (verified free on 2026-10-18, bound to 127.0.0.1): Postgres 5441, Redis 6380, API 4100, web 3200 (container port 3000).
 
