@@ -14,7 +14,7 @@ export function UserMenu({ user }: { user: SessionUser }) {
   const logout = useLogout();
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="ghost" className="h-auto gap-2 px-2 py-1.5" aria-label={`Account menu for ${user.name}`} />}>
+      <DropdownMenuTrigger render={<Button variant="ghost" className="h-11 gap-2 px-2 py-1.5 md:h-auto" aria-label={`Account menu for ${user.name}`} />}>
         <Avatar className="size-7">
           <AvatarFallback className="text-xs">{user.name.slice(0, 1).toUpperCase()}</AvatarFallback>
         </Avatar>

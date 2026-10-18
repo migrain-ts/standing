@@ -96,6 +96,7 @@ export function SeatMap({ map, status, priceByOrd, onToggle, variant }: Props) {
     const primary = colour('--primary');
     const ring = colour('--ring');
     const mine = colour('--foreground');
+    const outline = colour('--muted-foreground');
     const free = [0, 1, 2, 3, 4].map((i) => colour(`--chart-${i + 1}`));
     const selected: number[] = [];
     for (let i = 0; i < map.seats.length; i++) {
@@ -112,6 +113,11 @@ export function SeatMap({ map, status, priceByOrd, onToggle, variant }: Props) {
           ctx.fillStyle = free[Number(sectionToken(seat[2]).slice(-1)) - 1] ?? primary;
           ctx.arc(x, y, r, 0, Math.PI * 2);
           ctx.fill();
+          // The 55% section fill alone is below 3:1 on the card, so every free seat also gets a full-strength outline.
+          ctx.globalAlpha = 1;
+          ctx.lineWidth = 1;
+          ctx.strokeStyle = outline;
+          ctx.stroke();
           break;
         case 'held':
           ctx.globalAlpha = 0.35;
@@ -287,8 +293,8 @@ export function SeatMap({ map, status, priceByOrd, onToggle, variant }: Props) {
     <div className="space-y-2">
       <div
         ref={wrapRef}
-        className="relative max-h-[32rem] min-h-56 w-full overflow-hidden rounded-lg border border-border bg-card"
-        style={{ aspectRatio: `${map.width + 80} / ${map.height + 70}` }}
+        className="relative max-h-[32rem] w-full overflow-hidden rounded-lg border border-border bg-card"
+        style={{ aspectRatio: String(Math.min(1.6, (map.width + 80) / (map.height + 70))) }}
       >
         <span data-probe aria-hidden className="pointer-events-none absolute size-0 opacity-0" />
         <canvas
@@ -314,7 +320,7 @@ export function SeatMap({ map, status, priceByOrd, onToggle, variant }: Props) {
             </TooltipContent>
           </Tooltip>
         )}
-        <Button type="button" variant="secondary" size="sm" className="absolute bottom-2 right-2" onClick={resetView}>
+        <Button type="button" variant="secondary" size="sm" className="absolute bottom-2 right-2 h-11 md:h-8" onClick={resetView}>
           Reset view
         </Button>
       </div>

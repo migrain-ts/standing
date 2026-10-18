@@ -16,7 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { H1 } from '@/components/ui/typography';
 import { api, ApiClientError } from '@/lib/api';
-import { bestAvailable } from '@/lib/bestAvailable';
+import { allInSection, bestAvailable } from '@/lib/bestAvailable';
 import { checkoutReducer, initialCheckout } from '@/lib/checkoutMachine';
 import { remainingSeconds } from '@/lib/countdown';
 import { useMe } from '@/lib/auth';
@@ -48,6 +48,8 @@ export default function EventPage() {
   const [selection, dispatchSel] = useReducer((s: ReadonlySet<number>, a: SelectionAction) => selectionReducer(s, a, MAX_SEATS_PER_HOLD), NONE);
   const [takenLocal, setTakenLocal] = useState<ReadonlySet<number>>(NONE);
   const [bestCount, setBestCount] = useState(2);
+  const [sectionOrd, setSectionOrd] = useState<number | null>(null);
+  const [bestNotice, setBestNotice] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
@@ -105,7 +107,7 @@ export default function EventPage() {
       dispatch({ type: 'expire' });
       void qc.invalidateQueries({ queryKey: ['availability', eventId] });
     }
-  }, [hold, remaining, qc, eventId]);
+  }, [hold, remaining, checkout.phase, qc, eventId]);
 
   const onToggle = (idx: number) => {
     if (checkout.phase === 'paying' || checkout.phase === 'declined' || checkout.phase === 'holding') return;
@@ -116,10 +118,17 @@ export default function EventPage() {
   const onBest = () => {
     if (!map) return;
     setNotice(null);
+    setBestNotice(null);
     const base = statusArray(map.seats.length, { held: availQ.data?.held ?? [], sold: [...(availQ.data?.sold ?? []), ...takenLocal] }, NONE, mine);
-    const picked = bestAvailable(map.seats, base, bestCount);
-    if (picked.length === 0) toast.error(`There are not ${bestCount} seats left to pick.`);
-    else dispatchSel({ type: 'set', idxs: picked });
+    const picked = bestAvailable(map.seats, base, bestCount, sectionOrd ?? undefined);
+    const section = event?.sections.find((x) => x.ord === sectionOrd);
+    if (picked.length === 0) setBestNotice(`There are not ${bestCount} seats left to pick.`);
+    else {
+      dispatchSel({ type: 'set', idxs: picked });
+      setBestNotice(
+        section && !allInSection(map.seats, picked, section.ord) ? `${section.name} has no ${bestCount} seats together, so these are the closest available.` : null,
+      );
+    }
   };
 
   const ticket = checkout.phase === 'selecting' || checkout.phase === 'paying' || checkout.phase === 'declined' ? checkout.ticket : null;
@@ -152,7 +161,8 @@ export default function EventPage() {
         const takenIdx = new Set(takenSeatIds(e.details).flatMap((id) => map.seatIds.indexOf(id)).filter((i) => i >= 0));
         setTakenLocal((prev) => new Set([...prev, ...takenIdx]));
         dispatchSel({ type: 'set', idxs: [...selection].filter((i) => !takenIdx.has(i)) });
-        setNotice(`${seatsLabel(takenIdx.size || 1)} you picked ${takenIdx.size === 1 ? 'was' : 'were'} just taken. Choose again.`);
+        const n = takenIdx.size || 1;
+        setNotice(`${seatsLabel(n)} you picked ${n === 1 ? 'was' : 'were'} just taken. Choose again.`);
       } else if (e instanceof ApiClientError && e.code === 'queue_required') {
         dispatch({ type: 'requeue' });
         setNotice('Your turn timed out. You are back in the waiting room.');
@@ -228,7 +238,7 @@ export default function EventPage() {
     <TooltipProvider delay={0}>
       <SiteHeader />
       <main className="mx-auto w-full max-w-5xl px-4 py-6 md:py-10">
-        <Link href="/" className="text-sm text-muted-foreground underline-offset-4 hover:underline">
+        <Link href="/" className="inline-flex min-h-11 items-center text-sm text-muted-foreground underline-offset-4 hover:underline md:min-h-0">
           All events
         </Link>
         {event ? (
@@ -261,7 +271,7 @@ export default function EventPage() {
         )}
 
         <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
-          <section aria-label="Seat map" className="space-y-4">
+          <section aria-label="Seat map" className="min-w-0 space-y-4">
             {mapQ.isError && <QueryError title="Could not load the seat map" error={mapQ.error} onRetry={() => mapQ.refetch()} />}
             {map && event ? (
               <SeatMap map={map} status={status} priceByOrd={priceByOrd} onToggle={onToggle} variant="buyer" />
@@ -273,7 +283,7 @@ export default function EventPage() {
                 <ul className="flex flex-wrap gap-x-6 gap-y-2">
                   {event.sections.map((s) => (
                     <li key={s.id} className="flex items-center gap-2 text-sm">
-                      <span aria-hidden className="size-3 rounded-full" style={{ background: `var(${sectionToken(s.ord)})`, opacity: 0.55 }} />
+                      <span aria-hidden className="size-3 rounded-full border border-muted-foreground" style={{ background: `color-mix(in oklab, var(${sectionToken(s.ord)}) 55%, transparent)` }} />
                       <span className="font-medium">{s.name}</span>
                       <span className="tabular-nums text-muted-foreground">{formatMoney(s.priceCents)}</span>
                     </li>
@@ -302,6 +312,10 @@ export default function EventPage() {
               seats={selectedSeats}
               heldSeats={heldSeats}
               maxSeats={MAX_SEATS_PER_HOLD}
+              sections={event?.sections ?? []}
+              sectionOrd={sectionOrd}
+              onSection={setSectionOrd}
+              bestNotice={bestNotice}
               bestCount={bestCount}
               onBestCount={setBestCount}
               onBest={onBest}

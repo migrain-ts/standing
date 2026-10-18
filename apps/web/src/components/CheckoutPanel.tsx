@@ -22,6 +22,10 @@ type Props = {
   seats: PanelSeat[];
   heldSeats: PanelSeat[];
   maxSeats: number;
+  sections: { ord: number; name: string; priceCents: number }[];
+  sectionOrd: number | null;
+  onSection: (ord: number | null) => void;
+  bestNotice: string | null;
   bestCount: number;
   onBestCount: (n: number) => void;
   onBest: () => void;
@@ -237,13 +241,34 @@ export function CheckoutPanel(p: Props) {
                 Best available
               </Button>
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="best-section">Section</Label>
+              <NativeSelect
+                id="best-section"
+                className="h-11 md:h-9"
+                value={p.sectionOrd ?? ''}
+                onChange={(e) => p.onSection(e.target.value === '' ? null : Number(e.target.value))}
+              >
+                <option value="">Any section</option>
+                {p.sections.map((s) => (
+                  <option key={s.ord} value={s.ord}>
+                    {s.name} - {formatMoney(s.priceCents)}
+                  </option>
+                ))}
+              </NativeSelect>
+              {p.bestNotice && (
+                <p role="status" className="text-sm text-muted-foreground">
+                  {p.bestNotice}
+                </p>
+              )}
+            </div>
             <Separator />
             {p.seats.length === 0 ? (
               <p className="text-sm text-muted-foreground">Select up to {p.maxSeats} seats on the map, or use Best available.</p>
             ) : (
               <div className="space-y-3">
                 <SeatList seats={p.seats} />
-                <Button variant="link" size="sm" className="h-auto p-0" onClick={p.onClear}>
+                <Button variant="link" size="sm" className="h-11 p-0 md:h-auto" onClick={p.onClear}>
                   Clear selection
                 </Button>
               </div>

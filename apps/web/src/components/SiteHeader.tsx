@@ -12,13 +12,13 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur">
       <div className="mx-auto flex h-14 w-full max-w-5xl items-center gap-2 px-4">
-        <Link href="/" className="mr-2 flex items-center gap-2 font-semibold tracking-tight">
+        <Link href="/" className="mr-2 flex min-h-11 items-center gap-2 font-semibold tracking-tight md:min-h-0">
           <TicketLineIcon className="size-5 text-primary" aria-hidden />
           Standing
         </Link>
         <nav aria-label="Primary" className="flex items-center gap-1">
           {navItems(me?.nav ?? null).map((item) => (
-            <Button key={item.href} asChild nativeButton={false} variant="ghost" size="sm">
+            <Button key={item.href} asChild nativeButton={false} variant="ghost" size="sm" className="h-11 md:h-8">
               <Link href={item.href}>{item.label}</Link>
             </Button>
           ))}

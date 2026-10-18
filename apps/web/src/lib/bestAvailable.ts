@@ -70,3 +70,8 @@ export function bestAvailable(seats: VenueMap['seats'], status: readonly Status[
     .slice(0, count)
     .sort((a, b) => a - b);
 }
+
+/** True when every picked seat sits in section `ord`; used to tell the buyer when the preferred section had no fit. */
+export function allInSection(seats: VenueMap['seats'], idxs: readonly number[], ord: number): boolean {
+  return idxs.every((i) => seats[i]?.[2] === ord);
+}

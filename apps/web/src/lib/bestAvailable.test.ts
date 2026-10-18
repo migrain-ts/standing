@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bestAvailable } from './bestAvailable';
+import { allInSection, bestAvailable } from './bestAvailable';
 import type { Status } from './seatmap';
 import type { VenueMap } from './seatmap';
 
@@ -46,5 +46,20 @@ describe('bestAvailable', () => {
     const seats = build([[0, 'AA', 3]]);
     const a = [...seats, ...build([[0, 'Z', 3]])];
     expect(bestAvailable(a, allFree(6), 3)).toEqual([3, 4, 5]);
+  });
+});
+
+describe('preferSection fallback', () => {
+  it('falls back to another section when the preferred one has no run', () => {
+    const seats = build([[0, 'A', 4], [1, 'A', 4]]);
+    const st = allFree(8);
+    for (const i of [4, 6]) st[i] = 'sold'; // section 1 has only single free seats
+    const picked = bestAvailable(seats, st, 2, 1);
+    expect(picked).toEqual([1, 2]);
+    expect(allInSection(seats, picked, 1)).toBe(false);
+  });
+  it('reports a preferred-section hit', () => {
+    const seats = build([[0, 'A', 4], [1, 'A', 4]]);
+    expect(allInSection(seats, bestAvailable(seats, allFree(8), 2, 1), 1)).toBe(true);
   });
 });

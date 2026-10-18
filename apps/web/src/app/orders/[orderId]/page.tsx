@@ -57,7 +57,7 @@ function Order() {
   const row = rowsQ.data?.orders.find((o) => o.id === orderId);
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-8 md:py-12">
-      <Link href="/orders" className="text-sm text-muted-foreground underline-offset-4 hover:underline">
+      <Link href="/orders" className="inline-flex min-h-11 items-center text-sm text-muted-foreground underline-offset-4 hover:underline md:min-h-0">
         Your orders
       </Link>
       {orderQ.isError && (
