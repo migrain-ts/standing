@@ -65,6 +65,27 @@ describe('projectOutbox', () => {
     expect(projected.section).toEqual([[f.sectionId, 500, 50_000]]);
   });
 
+  it('never deadlocks when two projectors claim batches touching events X and Y in opposite orders', { timeout: 120_000 }, async () => {
+    const x = await insertEventFixture(t.db, { rows: 10, seatsPerRow: 20, priceCents: 100 });
+    const y = await insertEventFixture(t.db, { rows: 10, seatsPerRow: 20, priceCents: 100 });
+    const buyer = await makeBuyer(t.db, 'xy');
+    const at = new Date(t.clock.now().getTime() + 5_000); // one minute bucket shared by both events
+    // Outbox order X, Y, Y, X, ...: with batches of 2, one projector sees [X, Y] while the other sees [Y, X].
+    for (let i = 0; i < 400; i++) {
+      const f = i % 4 === 0 || i % 4 === 3 ? x : y;
+      await insertPaidOrder(t.db, { eventId: f.eventId, tenantId: f.tenantId, buyerId: buyer, seatIds: [f.seatIds[i >> 1]!], at });
+    }
+    const drain = async () => { let n = 0; for (let p = 1; p;) { p = (await projectOutbox(t.db, { clock: t.clock, batchSize: 2 })).processed; n += p; } return n; };
+    const runs = await Promise.all([drain(), drain()]);
+    expect(runs[0]! + runs[1]!).toBe(400);
+    for (const f of [x, y]) {
+      const projected = await rollups(f.eventId);
+      await rebuildRollups(t.db, f.eventId);
+      expect(await rollups(f.eventId)).toEqual(projected);
+      expect(projected.section).toEqual([[f.sectionId, 200, 20_000]]);
+    }
+  });
+
   it('publishes one aggregated delta per event after the commit, and a failing publisher does not undo the projection', async () => {
     const f = await insertEventFixture(t.db, { rows: 1, seatsPerRow: 6, priceCents: 500 });
     await sell(f, [[0, 1], [2]]);

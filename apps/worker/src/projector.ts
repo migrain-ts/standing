@@ -52,14 +52,16 @@ export async function projectOutbox(
         skipped++;
       }
     }
-    for (const m of minute.values()) {
+    // Sorted upserts: two projectors whose batches touch the same rollup rows lock them in the same order (no deadlock).
+    const byKey = <T>(m: Map<string, T>) => [...m.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([, v]) => v);
+    for (const m of byKey(minute)) {
       await tx.insert(schema.salesByMinute).values({ eventId: m.eventId, bucket: m.bucket, tickets: m.tickets, revenueCents: m.revenue })
         .onConflictDoUpdate({
           target: [schema.salesByMinute.eventId, schema.salesByMinute.bucket],
           set: { tickets: sql`${schema.salesByMinute.tickets} + excluded.tickets`, revenueCents: sql`${schema.salesByMinute.revenueCents} + excluded.revenue_cents` },
         });
     }
-    for (const s of section.values()) {
+    for (const s of byKey(section)) {
       await tx.insert(schema.salesBySection).values({ eventId: s.eventId, sectionId: s.sectionId, tickets: s.tickets, revenueCents: s.revenue })
         .onConflictDoUpdate({
           target: [schema.salesBySection.eventId, schema.salesBySection.sectionId],

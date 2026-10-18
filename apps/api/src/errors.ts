@@ -20,9 +20,21 @@ export const errorHandler: ErrorHandler = (err, c) => {
     const codes: Record<number, string> = { 400: 'invalid_request', 401: 'unauthenticated', 403: 'forbidden', 404: 'not_found', 413: 'payload_too_large' };
     return c.json({ error: { code: codes[err.status] ?? 'http_error', message: err.status === 400 ? 'Invalid request' : err.message } }, err.status);
   }
+  if (isRetryableDbConflict(err)) return c.json({ error: { code: 'conflict_retry', message: 'Please try again' } }, 409);
   console.error(safeSummary(err));
   return c.json({ error: { code: 'internal', message: 'Internal error' } }, 500);
 };
+
+// 40P01 deadlock_detected, 40001 serialization_failure: Postgres aborted the transaction and nothing was written, so the
+// request can simply be retried. The pg error is the error itself or, wrapped by Drizzle, its `cause`.
+const RETRYABLE_PG_CODES = new Set(['40P01', '40001']);
+function pgCode(e: unknown): string | undefined {
+  if (typeof e !== 'object' || e === null || !('code' in e)) return undefined;
+  return typeof e.code === 'string' ? e.code : undefined;
+}
+function isRetryableDbConflict(err: Error): boolean {
+  return [pgCode(err), pgCode(err.cause)].some((code) => code !== undefined && RETRYABLE_PG_CODES.has(code));
+}
 
 // Driver errors (e.g. Drizzle's "Failed query: ... params: ...") embed query parameters such as emails and password
 // hashes in their message, so the message of the thrown error is never logged. The pg error in `cause` carries a

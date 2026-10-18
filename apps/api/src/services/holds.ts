@@ -85,6 +85,11 @@ export async function createHold(
     const [event] = await tx.select({ status: schema.events.status }).from(schema.events).where(eq(schema.events.id, eventId));
     if (!event || event.status !== 'published') throw notFound();
 
+    // Lock order rule (shared with cancelHold and payHold): the hold row first, then its seats. Without it, a
+    // concurrent cancel or pay of the previous hold (hold, then seats) deadlocks against this release (seats, then hold).
+    await tx.execute(sql`
+      select id from holds where buyer_id = ${o.buyerId}::uuid and event_id = ${eventId}::uuid and status = 'active'
+      order by id for update`);
     // Replace the buyer's previous active hold for this event. If the new claim fails, the rollback restores it.
     await tx.execute(sql`
       update event_seats set status = 'available', hold_id = null, held_until = null

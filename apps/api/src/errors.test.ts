@@ -61,3 +61,24 @@ describe('errorHandler (ApiError)', () => {
     expect(Object.keys(((await res.json()) as { error: object }).error).sort()).toEqual(['code', 'message']);
   });
 });
+
+describe('errorHandler (retryable database conflicts)', () => {
+  it.each(['40P01', '40001'])('maps pg %s (in cause or on the error) to a retryable 409 conflict_retry', async (code) => {
+    const lines = captureConsoleError();
+    const wrapped = Object.assign(new Error('Failed query: update ...'), { name: 'DrizzleQueryError', cause: Object.assign(new Error('deadlock detected'), { code }) });
+    const bare = Object.assign(new Error('deadlock detected'), { code });
+    for (const err of [wrapped, bare]) {
+      const app = new Hono().onError(errorHandler).get('/x', () => { throw err; });
+      const res = await app.request('/x');
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({ error: { code: 'conflict_retry', message: 'Please try again' } });
+    }
+    expect(lines).toEqual([]);
+  });
+
+  it('keeps other database errors as an opaque 500', async () => {
+    captureConsoleError();
+    const app = new Hono().onError(errorHandler).get('/x', () => { throw Object.assign(new Error('x'), { cause: Object.assign(new Error('y'), { code: '23505' }) }); });
+    expect((await app.request('/x')).status).toBe(500);
+  });
+});
