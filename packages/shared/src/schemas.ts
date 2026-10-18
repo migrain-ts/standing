@@ -35,13 +35,17 @@ export const venueCreateSchema = z
 export type VenueCreateInput = z.infer<typeof venueCreateSchema>;
 
 const uuid = z.string().regex(UUID_RE, 'Expected a UUID');
+const eventName = z.string().trim().min(1).max(120);
+const eventStartsAt = z.coerce.date();
+const admissionLimit = z.number().int().min(0).max(2000);
 export const eventCreateSchema = z.object({
   venueId: uuid,
-  name: z.string().trim().min(1).max(120),
-  startsAt: z.coerce.date(),
-  admissionLimit: z.number().int().min(0).max(2000).default(200),
+  name: eventName,
+  startsAt: eventStartsAt,
+  admissionLimit: admissionLimit.default(200),
 });
-export const eventUpdateSchema = eventCreateSchema.omit({ venueId: true }).partial();
+// No default here: zod 4 re-applies defaults through .partial(), which would overwrite the stored limit on every PATCH.
+export const eventUpdateSchema = z.object({ name: eventName, startsAt: eventStartsAt, admissionLimit }).partial();
 export const tiersSchema = z
   .array(z.object({ sectionId: uuid, priceCents: z.number().int().min(0).max(1_000_000) }))
   .min(1)

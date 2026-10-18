@@ -90,6 +90,16 @@ describe('events', () => {
     expect(res.status).toBe(200);
     expect(((await res.json()) as { event: { name: string; admissionLimit: number } }).event).toMatchObject({ name: 'Renamed', admissionLimit: 0 });
   });
+  it('PATCH without admissionLimit keeps the stored limit; PATCH {} is a 200 no-op', async () => {
+    const f = await makeTenantFixture(t);
+    const patch = (b: unknown) => call(t.app, f.manager.cookie, 'PATCH', `/tenants/${f.tenantId}/events/${f.draftEventId}`, b);
+    expect((await patch({ admissionLimit: 500 })).status).toBe(200);
+    const renamed = await patch({ name: 'Only name' });
+    expect(((await renamed.json()) as { event: { name: string; admissionLimit: number } }).event).toMatchObject({ name: 'Only name', admissionLimit: 500 });
+    const empty = await patch({});
+    expect(empty.status).toBe(200);
+    expect(((await empty.json()) as { event: { name: string; admissionLimit: number } }).event).toMatchObject({ name: 'Only name', admissionLimit: 500 });
+  });
   it('400 when a tier names a section of another venue', async () => {
     const f = await makeTenantFixture(t);
     const g = await makeTenantFixture(t);
