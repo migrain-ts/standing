@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { sql } from 'drizzle-orm';
 import type { TenantRoleName } from '@standing/shared';
 import { createApp } from './app';
 import { makeTenantFixture, type TenantFixture } from './fixtures';
@@ -122,3 +123,34 @@ for (const row of MATRIX) {
     }
   });
 }
+
+/** Tenant B's events (with their tiers) and venues, to prove a request through tenant A's URL changed nothing of B's. */
+async function tenantRows(tenantId: string) {
+  const r = await t.db.execute(sql`
+    select 'event' as kind, to_jsonb(e) as row from events e where e.tenant_id = ${tenantId}::uuid
+    union all select 'tier', to_jsonb(p) from price_tiers p join events e on e.id = p.event_id where e.tenant_id = ${tenantId}::uuid
+    union all select 'venue', to_jsonb(v) from venues v where v.tenant_id = ${tenantId}::uuid
+    order by 1, 2`);
+  return r.rows;
+}
+
+// A handler that loads a child row by id only (forgetting `tenant_id`) would let a manager of tenant A reach tenant
+// B's event or venue through A's URL, which the membership middleware alone cannot see.
+describe("child rows of another tenant through the caller's own tenant URL", () => {
+  for (const row of MATRIX.filter((r) => /:eventId|:venueId/.test(r.pattern))) {
+    it(`${row.method} ${row.pattern}: 404 with B's event or venue id, B unchanged`, async () => {
+      const f = await makeTenantFixture(t);
+      const url = row
+        .url(f)
+        .replace(f.draftEventId, f.outsiderDraftEventId)
+        .replace(f.eventId, f.outsiderEventId)
+        .replace(f.venueId, f.outsiderVenueId);
+      expect(url).not.toBe(row.url(f));
+      const before = await tenantRows(f.outsiderTenantId);
+      const res = await call(t.app, f.manager.cookie, row.method, url, bodyOf(row, f));
+      expect(res.status).toBe(404);
+      await res.arrayBuffer();
+      expect(await tenantRows(f.outsiderTenantId)).toEqual(before);
+    });
+  }
+});

@@ -10,6 +10,9 @@ export async function makeTenantFixture(t: Pick<TestApp, 'db' | 'clock'>) {
     tenantId: base.tenantId, venueId: base.venueId, sectionId: base.sectionId, status: 'draft', priceCents: 5000, name: 'Draft event',
   });
   const other = await insertEventFixture(t.db, { rows: 2, seatsPerRow: 2, tenantName: 'Other Tenant' });
+  const outsiderDraftEventId = await insertEvent(t.db, {
+    tenantId: other.tenantId, venueId: other.venueId, sectionId: other.sectionId, status: 'draft', priceCents: 5000, name: 'Other draft',
+  });
   const owner = await makeUser(t, 'owner');
   const manager = await makeUser(t, 'manager');
   const door = await makeUser(t, 'door');
@@ -25,6 +28,6 @@ export async function makeTenantFixture(t: Pick<TestApp, 'db' | 'clock'>) {
   return {
     tenantId: base.tenantId, venueId: base.venueId, sectionId: base.sectionId, eventId: base.eventId,
     draftEventId, seatIds: base.seatIds, owner, manager, door, outsider,
-    outsiderTenantId: other.tenantId, outsiderEventId: other.eventId,
+    outsiderTenantId: other.tenantId, outsiderEventId: other.eventId, outsiderDraftEventId, outsiderVenueId: other.venueId,
   };
 }
