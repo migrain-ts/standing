@@ -155,7 +155,20 @@ export async function listPublicEvents(db: Db, clock: Clock) {
   }));
 }
 
-/** Resolves a published, upcoming event or throws 404. Returns its venue id for the map route. */
+/**
+ * Light lookup for the hot buyer routes (availability, map, queue, holds): a published, upcoming event or 404, read
+ * by primary key with no aggregate over event_seats. The detail page uses getPublicEvent.
+ */
+export async function lookupOnSaleEvent(db: Db, clock: Clock, eventId: string) {
+  const r = await db.execute(sql`
+    select id, venue_id, admission_limit from events
+    where id = ${parseId(eventId)}::uuid and status = 'published' and starts_at > ${clock.now()}::timestamptz`);
+  const x = r.rows[0];
+  if (!x) throw notFound();
+  return { id: String(x.id), venueId: String(x.venue_id), admissionLimit: Number(x.admission_limit) };
+}
+
+/** Resolves a published, upcoming event with its counts and sections or throws 404 (the event detail page). */
 export async function getPublicEvent(db: Db, clock: Clock, eventId: string) {
   const now = clock.now();
   const id = parseId(eventId);

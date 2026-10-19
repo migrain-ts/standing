@@ -4,7 +4,7 @@ import type { Clock } from '@standing/shared';
 import type { AuthUser, Env } from '../app';
 import { requireAuth } from '../auth/middleware';
 import { redisRateLimit } from '../redis-rate-limit';
-import { getPublicEvent } from '../services/events';
+import { lookupOnSaleEvent } from '../services/events';
 
 const DEGRADED = { ticket: 'open', state: 'admitted', degraded: true } as const;
 
@@ -23,7 +23,7 @@ export function queueRoutes(deps: { redis?: Redis | undefined; clock: Clock }) {
   return new Hono<Env>()
     .post('/public/events/:eventId/queue', requireAuth, joinLimit, async (c) => {
       const d = c.get('deps');
-      const event = await getPublicEvent(d.db, d.clock, c.req.param('eventId'));
+      const event = await lookupOnSaleEvent(d.db, d.clock, c.req.param('eventId'));
       const room = c.get('svc').waitingRoom;
       if (!room || event.admissionLimit <= 0) return c.json(DEGRADED);
       try {
@@ -34,7 +34,7 @@ export function queueRoutes(deps: { redis?: Redis | undefined; clock: Clock }) {
     })
     .get('/public/events/:eventId/queue/:ticket', requireAuth, async (c) => {
       const d = c.get('deps');
-      const event = await getPublicEvent(d.db, d.clock, c.req.param('eventId'));
+      const event = await lookupOnSaleEvent(d.db, d.clock, c.req.param('eventId'));
       const room = c.get('svc').waitingRoom;
       if (!room || event.admissionLimit <= 0) return c.json(DEGRADED);
       const ticket = c.req.param('ticket');

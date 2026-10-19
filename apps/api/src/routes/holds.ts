@@ -4,7 +4,7 @@ import type { AuthUser, Deps, Env } from '../app';
 import { requireAuth } from '../auth/middleware';
 import { ApiError } from '../errors';
 import { redisRateLimit } from '../redis-rate-limit';
-import { getPublicEvent } from '../services/events';
+import { lookupOnSaleEvent } from '../services/events';
 import { cancelHold, createHold, getHold } from '../services/holds';
 import { checkGate } from '../services/waiting-room';
 import { validator } from '../validate';
@@ -24,7 +24,7 @@ export function holdRoutes(deps: Pick<Deps, 'redis' | 'clock'>) {
   return new Hono<Env>()
     .post('/public/events/:eventId/holds', requireAuth, holdLimit, validator('json', holdCreateSchema), async (c) => {
       const d = c.get('deps');
-      const event = await getPublicEvent(d.db, d.clock, c.req.param('eventId'));
+      const event = await lookupOnSaleEvent(d.db, d.clock, c.req.param('eventId'));
       const gate = await checkGate(c.get('svc').waitingRoom, event.id, c.req.header('x-queue-ticket'), event.admissionLimit);
       if (gate === 'denied') throw new ApiError(403, 'queue_required', 'Join the waiting room first');
       const hold = await createHold(d, { buyerId: c.get('user').id, eventId: event.id, seatIds: c.req.valid('json').seatIds });
