@@ -15,7 +15,7 @@ RLS is not used in v1. Isolation rests on two things:
 
 ## Consequences
 
-- A missing tenant filter inside a handler is caught by tests (the matrix for the route, plus cross-tenant tests in the route test files), not by the database. There is no database-level backstop; the README says so.
+- A missing tenant filter inside a handler is caught by tests, not by the database: for every matrix row whose URL holds an event or venue id, a manager of tenant A calls A's URL with tenant B's event or venue id and must get 404 with B's rows unchanged (removing the filter from `lockEvent` makes four rows fail); the route test files add cross-tenant cases. A child id that arrives in a request body (for example `venueId` when creating an event) is not part of that matrix column; `createEvent` filters the venue on `tenant_id` itself. There is no database-level backstop; the README says so.
 - The buyer flow (storefront, holds, payment) crosses tenants by design and stays simple.
 
 ## Alternatives rejected

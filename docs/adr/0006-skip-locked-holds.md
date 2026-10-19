@@ -1,6 +1,6 @@
 # ADR 0006: `FOR UPDATE SKIP LOCKED` holds, a per-buyer advisory lock, lazy expiry
 
-Status: accepted (2026-10-18), amended in Task 8 (per-buyer lock)
+Status: accepted (2026-10-18), amended in Task 8 (per-buyer lock) and in the final fix wave (lock order rule)
 
 ## Context
 
@@ -15,8 +15,9 @@ Under a Rush, many buyers request overlapping seats at the same instant. A hold 
 
 ## Consequences
 
-- No lock waits on seats, so no convoy and no deadlock between holds.
-- `apps/api/src/services/holds.test.ts` pins: 200 buyers racing for 50 seats (4 per seat) give exactly one winner per seat; 60 buyers requesting overlapping pairs in opposite orders never leave a partial hold or a 500; concurrent requests from the same buyer leave one active hold; the race stays exact when every first hold expired mid-run, with no cleanup running.
+- No lock waits between concurrent claims, so no convoy and no deadlock between them.
+- **Lock order rule: the hold row first, then its seats.** The paths that touch an existing hold do wait: `cancelHold` and `payHold` lock the hold row, then its seats; `createHold` (after the advisory lock) locks the buyer's active holds for the event, `order by id for update`, before releasing their seats. Before this rule, a cancel or a pay racing a replacing hold of the same buyer deadlocked (40P01), as did the cleanup racing a cancel. The worker's `releaseExpiredHolds` never waits: sorted `FOR UPDATE SKIP LOCKED` subqueries, and skipped rows are handled on the next cycle. `apps/api/src/services/lock-order.test.ts` pins the four overlaps; a residual 40P01 or 40001 answers 409 `conflict_retry`, never a 500.
+- `apps/api/src/services/holds.test.ts` pins: 200 buyers racing for 50 seats (4 per seat) give exactly one winner per seat; 60 buyers requesting overlapping pairs in opposite orders never leave a partial hold or a 500; concurrent requests from the same buyer leave one active hold; the race stays exact after every first hold expired (the clock moves before the race), with no cleanup running.
 - Under heavy overlap some buyers see a 409 for a seat that ends up free. The benchmark reports conflicts (`docs/bench/latest.md`: 314 conflicts for 3,398 successful holds).
 
 ## Alternatives rejected

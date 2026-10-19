@@ -14,9 +14,11 @@ Redis holds only things that can be lost: the waiting room, rate-limit counters,
 
 ## Consequences
 
-- Flushing Redis mid-Rush cannot oversell or lose a sale. `apps/simulator/src/rush.integration.test.ts` flushes Redis during a Rush and checks the end state; a second test runs a whole Rush with Redis erroring on every call. The first test has a known gap, stated in the README: it does not prove that sales continue after the flush.
+- Flushing Redis mid-Rush cannot oversell or lose a sale. `apps/simulator/src/rush.integration.test.ts` flushes Redis 1.5 s into a Rush while seats are still free and asserts that orders keep growing after the flush and that buyers re-joined the waiting room; a second test runs a whole Rush with Redis erroring on every call. Neither proves arrival order after the flush (it is reset).
 - Every seat decision costs a Postgres transaction. The benchmark (`docs/bench/latest.md`) shows that this is fast enough for one laptop. It is not a capacity claim.
 - Losing Redis degrades fairness (arrival order) and freshness (live view), never correctness.
+- Sales stop in Postgres too: `payHold` reads the event's status and `starts_at` (bound clock) under the hold lock and refuses a closed or started event (409 `event_closed`).
+- The payment gateway is simulated and decides before the transaction validates the hold. With a real gateway this order would charge for a hold that turns out expired or closed; a real integration needs authorize, then the Postgres commit, then capture (or a payment record written outside the transaction and reconciled).
 
 ## Alternatives rejected
 
