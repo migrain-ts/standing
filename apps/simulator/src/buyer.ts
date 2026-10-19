@@ -67,7 +67,8 @@ async function enterQueue(ctx: BuyerCtx): Promise<string | null> {
       stats.inc('admitted');
       return ticket;
     }
-    // 'unknown': the ticket was lost, join again
+    // 'unknown': the ticket was lost (for example Redis was flushed), join again
+    stats.inc('requeued');
   }
   return null;
 }
@@ -118,6 +119,7 @@ export async function runBuyer(ctx: BuyerCtx): Promise<Outcome> {
       } else if (res.status === 409) {
         stats.inc('holdsConflict');
       } else if (res.status === 403 && errorBody.safeParse(res.body).data?.error.code === 'queue_required') {
+        stats.inc('requeued'); // the admission was lost (for example Redis was flushed): re-join the waiting room
         const next = await enterQueue(ctx);
         if (next === null) return 'error';
         ticket = next;

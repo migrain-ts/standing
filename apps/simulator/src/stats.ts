@@ -11,6 +11,8 @@ export type RushParams = {
 export type Counters = {
   started: number;
   queued: number;
+  /** Buyers who had to re-join the waiting room after `queue_required` or an `unknown` queue state. */
+  requeued: number;
   admitted: number;
   holdsOk: number;
   holdsConflict: number;
@@ -40,7 +42,7 @@ export function percentile(sample: readonly number[], p: number): number {
 }
 
 const zero = (): Counters => ({
-  started: 0, queued: 0, admitted: 0, holdsOk: 0, holdsConflict: 0, paid: 0, declined: 0, abandoned: 0, expired: 0, soldOut: 0, errors: 0,
+  started: 0, queued: 0, requeued: 0, admitted: 0, holdsOk: 0, holdsConflict: 0, paid: 0, declined: 0, abandoned: 0, expired: 0, soldOut: 0, errors: 0,
 });
 
 /** Single-threaded JS makes each increment atomic; the object keeps every figure of one run in one place. */
