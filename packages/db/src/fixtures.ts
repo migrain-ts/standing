@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
 import { asId, generateLayout, type EventId, type SeatId, type SectionId, type TenantId, type UserId, type VenueId } from '@standing/shared';
-import type { Db } from './client';
+import type { Db, Tx } from './client';
 import * as s from './schema';
 import { uuidList } from './sql';
 
@@ -119,7 +119,7 @@ export async function insertPaidOrder(
 }
 
 /** Independent recompute of the rollups from orders and order items. */
-export async function rebuildRollups(db: Db, eventId: string): Promise<void> {
+export async function rebuildRollups(db: Db | Tx, eventId: string): Promise<void> {
   await db.transaction(async (tx) => {
     await tx.execute(sql`delete from sales_by_minute where event_id = ${eventId}::uuid`);
     await tx.execute(sql`delete from sales_by_section where event_id = ${eventId}::uuid`);

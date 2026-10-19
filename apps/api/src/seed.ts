@@ -2,7 +2,7 @@
 // The demo password (DEMO_PASSWORD) is a local-development convenience and must never be used anywhere real.
 import { randomUUID } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
-import { rebuildRollups, schema, uuidList, type Db } from '@standing/db';
+import { rebuildRollups, schema, uuidList, type Db, type Tx } from '@standing/db';
 import { asId, DEMO_PASSWORD, DEMO_USERS, type Clock, type TenantId } from '@standing/shared';
 import { hashPassword } from './auth/password';
 import { createEvent, publishEvent, setTiers } from './services/events';
@@ -77,7 +77,15 @@ async function insertChunked<T extends Record<string, unknown>>(
 
 type HistoryOrder = { orderId: string; holdId: string; buyerId: string; at: Date; seats: Run };
 
-export async function seedDemo(db: Db, clock: Clock): Promise<SeedSummary> {
+/**
+ * One transaction for the whole seed: an interrupted first boot (crash, failed step) leaves no demo row behind, so
+ * the idempotency marker (the demo organizer) never exists without the rest. Nested service transactions are savepoints.
+ */
+export async function seedDemo(root: Db, clock: Clock): Promise<SeedSummary> {
+  return root.transaction((tx) => seedAll(tx, clock));
+}
+
+async function seedAll(db: Tx, clock: Clock): Promise<SeedSummary> {
   const existing = await db.select({ id: schema.users.id }).from(schema.users).where(eq(schema.users.email, DEMO_USERS.organizer));
   if (existing.length > 0) return { skipped: true, tenants: 0, events: 0, orders: 0, tickets: 0 };
   const now = clock.now();

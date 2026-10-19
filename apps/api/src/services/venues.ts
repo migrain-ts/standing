@@ -1,5 +1,5 @@
 import { and, eq, sql } from 'drizzle-orm';
-import { schema, type Db } from '@standing/db';
+import { schema, type Db, type Tx } from '@standing/db';
 import { asId, generateLayout, type VenueCreateInput, type VenueId } from '@standing/shared';
 import { ApiError } from '../errors';
 
@@ -14,7 +14,7 @@ export type VenueMap = {
 const CHUNK = 2000;
 
 export async function createVenue(
-  db: Db,
+  db: Db | Tx,
   o: { tenantId: string } & VenueCreateInput,
 ): Promise<{ id: VenueId; name: string; seatCount: number }> {
   return db.transaction(async (tx) => {

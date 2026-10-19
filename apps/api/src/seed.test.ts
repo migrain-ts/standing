@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm';
 import { call, makeApp, type TestApp } from './test-helpers';
 import { seedDemo } from './seed';
 import { oversold } from './services/live';
-import { DEMO_USERS } from '@standing/shared';
+import { DEMO_USERS, FakeClock, type Clock } from '@standing/shared';
 
 let t: TestApp;
 beforeAll(async () => {
@@ -67,4 +67,25 @@ describe('seedDemo', () => {
     const orders = (await (await call(t.app, (await call(t.app, null, 'POST', '/auth/demo', { persona: 'buyer' })).headers.get('set-cookie')?.split(';')[0] ?? null, 'GET', '/me/orders')).json()) as { orders: unknown[] };
     expect(orders.orders.length).toBe(2);
   });
+});
+
+describe('seedDemo interrupted midway', () => {
+  it('leaves no demo rows behind, and the next run seeds everything', async () => {
+    const fresh = await makeApp();
+    try {
+      // A clock that fails on its third read: after users, tenants and venues, while the events are being published.
+      const real = new FakeClock(new Date('2026-01-05T08:00:00Z'));
+      let reads = 0;
+      const failing: Clock = { now: () => { if (++reads === 3) throw new Error('interrupted'); return real.now(); } };
+      await expect(seedDemo(fresh.db, failing)).rejects.toThrow('interrupted');
+      expect(reads).toBe(3);
+      const left = await fresh.db.execute(sql`
+        select (select count(*)::int from users) as users, (select count(*)::int from tenants) as tenants,
+          (select count(*)::int from venues) as venues, (select count(*)::int from events) as events`);
+      expect(left.rows[0]).toEqual({ users: 0, tenants: 0, venues: 0, events: 0 });
+      expect(await seedDemo(fresh.db, real)).toMatchObject({ skipped: false, tenants: 3, events: 17 });
+    } finally {
+      await fresh.close();
+    }
+  }, 180_000);
 });

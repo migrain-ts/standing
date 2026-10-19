@@ -29,7 +29,7 @@ async function lockEvent(tx: Tx, tenantId: TenantId, eventId: string) {
   return ev;
 }
 
-export async function createEvent(db: Db, tenantId: TenantId, input: EventCreateInput) {
+export async function createEvent(db: Db | Tx, tenantId: TenantId, input: EventCreateInput) {
   const venueId = parseId(input.venueId);
   const [venue] = await db
     .select({ id: schema.venues.id })
@@ -60,7 +60,7 @@ export async function updateEvent(db: Db, tenantId: TenantId, eventId: string, i
   });
 }
 
-export async function setTiers(db: Db, tenantId: TenantId, eventId: string, tiers: TiersInput) {
+export async function setTiers(db: Db | Tx, tenantId: TenantId, eventId: string, tiers: TiersInput) {
   return db.transaction(async (tx) => {
     const ev = await lockEvent(tx, tenantId, eventId);
     if (ev.status !== 'draft') throw notDraft();
@@ -76,7 +76,7 @@ export async function setTiers(db: Db, tenantId: TenantId, eventId: string, tier
   });
 }
 
-export async function publishEvent(db: Db, clock: Clock, tenantId: TenantId, eventId: string) {
+export async function publishEvent(db: Db | Tx, clock: Clock, tenantId: TenantId, eventId: string) {
   return db.transaction(async (tx) => {
     const ev = await lockEvent(tx, tenantId, eventId);
     if (ev.status !== 'draft') throw new ApiError(409, 'not_draft', 'Only draft events can be published');
