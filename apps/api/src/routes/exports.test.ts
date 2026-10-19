@@ -58,8 +58,8 @@ describe('GET exports/sales.csv', () => {
   it('filters by from, to (inclusive days) and eventId', async () => {
     const { f } = await seed();
     const get = async (qs: string) => dataLines(await (await call(t.app, f.manager.cookie, 'GET', csvUrl(f, qs))).text());
-    expect(await get('?from=2026-01-10')).toHaveLength(2);
-    expect(await get('?to=2026-01-10')).toHaveLength(3);
+    expect(await get('?from=2026-01-10&to=2026-01-31')).toHaveLength(2);
+    expect(await get('?from=2026-01-01&to=2026-01-10')).toHaveLength(3);
     expect(await get('?from=2026-01-10&to=2026-01-10')).toHaveLength(1);
     expect(await get(`?eventId=${f.eventId}`)).toHaveLength(4);
     expect(await get(`?eventId=${f.draftEventId}`)).toHaveLength(0);
@@ -70,7 +70,9 @@ describe('GET exports/sales.csv', () => {
     const status = async (qs: string) => (await call(t.app, f.manager.cookie, 'GET', csvUrl(f, qs))).status;
     expect(await status('?from=2025-01-01&to=2026-02-06')).toBe(400); // 401 days
     expect(await status('?from=2025-01-01&to=2026-01-02')).toBe(200); // 366 days
-    expect(await status('?from=2026-13-01')).toBe(400);
+    expect(await status('?from=2026-01-10')).toBe(400); // one end only would be unbounded: both or neither
+    expect(await status('?to=2026-01-10')).toBe(400);
+    expect(await status('?from=2026-13-01&to=2026-12-01')).toBe(400);
     expect(await status('?from=yesterday')).toBe(400);
     expect(await status('?eventId=nope')).toBe(400);
   });

@@ -81,6 +81,8 @@ export const MAX_EXPORT_RANGE_DAYS = 366;
 /** Query of the sales exports. `from` and `to` are inclusive UTC days. */
 export const exportQuerySchema = z
   .object({ from: isoDay.optional(), to: isoDay.optional(), eventId: uuid.optional() })
+  // One end alone would be an unbounded range: give both days or neither.
+  .refine((q) => (q.from === undefined) === (q.to === undefined), { message: 'Give both from and to, or neither', path: ['to'] })
   .refine(
     (q) => !q.from || !q.to || (Date.parse(q.to) - Date.parse(q.from)) / 86_400_000 <= MAX_EXPORT_RANGE_DAYS,
     { message: `The range is at most ${MAX_EXPORT_RANGE_DAYS} days`, path: ['to'] },
