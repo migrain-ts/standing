@@ -87,8 +87,11 @@ describe('GET live (SSE)', () => {
     expect(acc.text).toContain('event: tick');
     expect(bus.listenerCount(f2.eventId)).toBe(1);
     const d: EventDelta = { eventId: f2.eventId, tenantId: f2.tenantId, tickets: 1, revenueCents: 5, seats: [], scanned: 0, at: w.clock.now().toISOString() };
-    await redis.publish(liveChannel(f2.eventId), JSON.stringify(d));
-    await readUntil(reader, 'event: delta', acc);
+    // start() does not wait for the psubscribe: re-publish until the delta comes through instead of a fixed sleep.
+    for (let i = 0; i < 25 && !acc.text.includes('event: delta'); i++) {
+      await redis.publish(liveChannel(f2.eventId), JSON.stringify(d));
+      await readUntil(reader, 'event: delta', acc, 200);
+    }
     expect(acc.text).toContain('event: delta');
     await reader.cancel();
     await waitFor(() => bus.listenerCount(f2.eventId) === 0);
