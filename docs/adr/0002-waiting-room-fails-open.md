@@ -16,7 +16,7 @@ During a Rush the waiting room keeps a bounded number of buyers (`events.admissi
 
 - `apps/api/src/services/waiting-room.test.ts` pins admission order, capacity under 200 concurrent joins, expiry, and "fails open when Redis errors". `apps/simulator/src/rush.integration.test.ts` runs a full Rush with Redis erroring on every call.
 - Fail open applies to Redis **errors**. After a **flush** (Redis reachable but empty) the gate fails closed for each admitted buyer: the ticket becomes `unknown`, the hold endpoint answers 403 `queue_required`, and the buyer joins again (the simulator counts these re-joins as `requeued`). Fairness is reset, sales go on: `rush.integration.test.ts` asserts that orders keep growing after a mid-run flush.
-- An admitted browser buyer who simply closes the tab still holds a slot until the TTL; only the simulator calls the release endpoint today.
+- The release endpoint is called by the simulator and by the web app (on `pagehide` and unmount, with `keepalive`), but best effort: a browser that crashes or loses its connection keeps its slot until the TTL.
 - The waiting room is not an anti-bot measure (out of scope). Admission tickets are bearer tokens, not bound to the user who joined: anyone holding an admitted ticket can use it.
 - The fail-open Rush test runs with `noDocumentQueue` (no BullMQ client), so it proves the purchase path without Redis, not the PDF queue.
 

@@ -82,9 +82,12 @@ describe('rush integration', () => {
     const c = stats.counters;
     const sold = await expectConsistent(t, fx.eventId, c.paid);
     const atEnd = await takenAndOrders(t.db, fx.eventId);
+    console.info(`MARGIN taken ${atFlush.taken}->${atEnd.taken} orders ${atFlush.orders}->${atEnd.orders}`);
     // The flush hit a live sale: seats were still free, and buyers who lost their admission re-joined and kept buying.
     expect(atFlush.taken).toBeLessThan(CAPACITY);
     expect(atEnd.orders).toBeGreaterThan(atFlush.orders);
+    // Held seats never expire under the FakeClock, so more taken seats proves a hold was created after the flush.
+    expect(atEnd.taken).toBeGreaterThan(atFlush.taken);
     expect(c.requeued).toBeGreaterThan(0);
     expect(c.paid).toBeGreaterThan(0);
     expect(sold).toBeGreaterThan(0);

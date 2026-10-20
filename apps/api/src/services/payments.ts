@@ -75,7 +75,7 @@ export async function payHold(
       select h.id, h.event_id, h.seat_count, h.status, h.expires_at, e.tenant_id,
         (e.status = 'published' and e.starts_at > ${now}::timestamptz) as on_sale
       from holds h join events e on e.id = h.event_id
-      where h.id = ${holdId}::uuid and h.buyer_id = ${o.buyerId}::uuid for update of h`);
+      where h.id = ${holdId}::uuid and h.buyer_id = ${o.buyerId}::uuid for update of h for share of e`); // share lock: a close committing concurrently is seen, or waits for this pay
     const hold = locked.rows[0] as
       | { id: string; event_id: string; seat_count: number; status: string; expires_at: Date | string; tenant_id: string; on_sale: boolean }
       | undefined;

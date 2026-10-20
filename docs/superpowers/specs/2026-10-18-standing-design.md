@@ -62,7 +62,7 @@ WHERE id = ANY($1) AND (status = 'available' OR held_until < now())
 ORDER BY id FOR UPDATE SKIP LOCKED
 ```
 
-If fewer rows come back than requested: rollback and 409 listing the taken seats. Otherwise mark them `held` with `held_until`. All or nothing, no lock waiting, so no deadlock. Expiry is claimed lazily through `held_until`; the worker only cleans up, correctness does not depend on it.
+If fewer rows come back than requested: rollback and 409 listing the taken seats. Otherwise mark them `held` with `held_until`. All or nothing. The claim itself never waits on a row lock; every other path takes locks in one order (hold row first, then seats), and the cleanup worker uses `skip locked`. Expiry is claimed lazily through `held_until`; the worker only cleans up, correctness does not depend on it.
 
 **Payment** (`POST /holds/:id/pay`, idempotency key): latency and failure rate are configurable (5% by default). One transaction: check the event is still on sale, published and not started (else 409 `event_closed`, nothing written, the hold stays), check the hold has not expired (else 410), mark seats `sold`, create order, signed tickets and an outbox row. The unique constraint on `order_items(event_id, seat_id)` makes a double sale impossible even if application code is wrong. The ticket PDF is an asynchronous job.
 

@@ -131,6 +131,28 @@ describe('payHold', () => {
     }
   });
 
+  it('waits for a closeEvent that is mid-commit, then answers 409 event_closed and creates no order', async () => {
+    const { f, buyer, hold } = await heldBy('closerace');
+    const closer = await t.pool.connect();
+    try {
+      await closer.query('begin');
+      await closer.query('select id from events where id = $1::uuid for update', [f.eventId]);
+      await closer.query(`update events set status = 'closed' where id = $1::uuid`, [f.eventId]);
+      let settled = false;
+      const pay = payHold(t.deps, { holdId: hold.id, buyerId: buyer.id, idempotencyKey: 'race' }).finally(() => {
+        settled = true;
+      });
+      pay.catch(() => undefined);
+      await new Promise((r) => setTimeout(r, 400));
+      expect(settled, 'pay must block on the event row while the close is uncommitted').toBe(false);
+      await closer.query('commit');
+      await expect(pay).rejects.toMatchObject({ status: 409, code: 'event_closed' });
+    } finally {
+      closer.release();
+    }
+    expect(await count(sql`select count(*)::int as n from orders where event_id = ${f.eventId}::uuid`)).toBe(0);
+  });
+
   it('hides other buyers holds', async () => {
     const { hold } = await heldBy('mine');
     const stranger = await makeUser(t, 'stranger');

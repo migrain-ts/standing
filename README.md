@@ -122,7 +122,7 @@ Caveat, from the file: these numbers describe one laptop running the load genera
 - **No refunds.** The live view's rule that revenue and sold figures never go down relies on it.
 - **Camera scanning depends on `BarcodeDetector`**, which not every browser has; manual code entry is the fallback. The real camera path was not tested (the e2e suite is headless).
 - **Tenant isolation has no database backstop.** No row-level security in v1 ([ADR 0005](docs/adr/0005-no-row-level-security-in-v1.md)); the middleware and the matrix test are the guarantee.
-- **Browser buyers who close the tab** keep their waiting-room slot until it expires (5 minutes), and browsing the event page consumes a slot while the page is open.
+- **Waiting-room release is best effort**: the web app releases the slot on page hide and unmount (keepalive request), but a crashed browser or a lost connection keeps it until it expires (5 minutes). Browsing the event page consumes a slot while the page is open, for signed-in visitors only (anonymous visitors take no slot).
 - **Admission tickets are bearer tokens**, not bound to the user (anti-bot is out of scope, [ADR 0002](docs/adr/0002-waiting-room-fails-open.md)).
 - **Login rate limit bypass, locally.** The compose API runs with `TRUST_PROXY=1` and is published on 127.0.0.1, so a direct local caller can rotate `X-Forwarded-For` and bypass the login limiter. Local demo only.
 - **Child tables carry no `tenant_id`.** The root aggregates (venues, events, orders, documents, outbox) do; `order_items`, `tickets`, `event_seats` and the other children inherit the tenant through foreign keys.

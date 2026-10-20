@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { sql } from 'drizzle-orm';
+import pg from 'pg';
 import { makeTenantFixture } from '../fixtures';
 import { call, makeApp, makeUser, type TestApp } from '../test-helpers';
 
@@ -17,15 +18,18 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** Records the SQL text of every query sent through the pool while `fn` runs. */
+/**
+ * Records the SQL text of every query while `fn` runs. Patching Client.prototype.query sees pool queries and the
+ * queries of Drizzle transactions (which run on a checked-out client), so no route body is invisible to it.
+ */
 async function capture(fn: () => Promise<void>): Promise<string[]> {
   const texts: string[] = [];
-  const original = t.pool.query.bind(t.pool) as (...args: unknown[]) => unknown;
-  vi.spyOn(t.pool, 'query').mockImplementation(((...args: unknown[]) => {
+  const original = pg.Client.prototype.query as (this: pg.Client, ...args: unknown[]) => unknown;
+  vi.spyOn(pg.Client.prototype, 'query').mockImplementation(function (this: pg.Client, ...args: unknown[]) {
     const q = args[0];
     texts.push(typeof q === 'string' ? q : String((q as { text?: unknown }).text ?? ''));
-    return original(...args);
-  }) as typeof t.pool.query);
+    return original.apply(this, args);
+  } as unknown as typeof pg.Client.prototype.query);
   await fn();
   return texts;
 }
@@ -52,6 +56,7 @@ describe('hot paths', () => {
       }
     });
     expect(statuses).toEqual([200, 200, 200, 200, 201]);
+    expect(texts.some((q) => /insert into\s+"?holds/i.test(q))).toBe(true); // the hold transaction body was seen
     expect(texts.filter((q) => /count\s*\(/i.test(q))).toEqual([]);
   });
 
