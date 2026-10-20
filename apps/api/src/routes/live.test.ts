@@ -47,12 +47,18 @@ describe('GET live/snapshot', () => {
   });
 });
 
+// One pending read per reader, kept across calls: a read that lost the race against the timer is awaited by the next
+// call instead of being abandoned, so a chunk that arrives late is never swallowed.
+const pendingReads = new WeakMap<ReadableStreamDefaultReader<Uint8Array>, Promise<ReadableStreamReadResult<Uint8Array>>>();
 async function readUntil(reader: ReadableStreamDefaultReader<Uint8Array>, needle: string, acc = { text: '' }, ms = 2000) {
   const dec = new TextDecoder();
   const end = Date.now() + ms;
   while (!acc.text.includes(needle) && Date.now() < end) {
-    const r = await Promise.race([reader.read(), new Promise<null>((res) => setTimeout(() => res(null), 200))]);
+    const pending = pendingReads.get(reader) ?? reader.read();
+    pendingReads.set(reader, pending);
+    const r = await Promise.race([pending, new Promise<null>((res) => setTimeout(() => res(null), 200))]);
     if (r === null) continue;
+    pendingReads.delete(reader);
     if (r.done) break;
     acc.text += dec.decode(r.value);
   }
@@ -62,6 +68,20 @@ const waitFor = async (fn: () => boolean, ms = 500) => {
   const end = Date.now() + ms;
   while (!fn() && Date.now() < end) await new Promise((r) => setTimeout(r, 10));
 };
+
+describe('readUntil helper', () => {
+  it('does not lose a chunk that arrives after a call timed out', async () => {
+    let push: (s: string) => void = () => undefined;
+    const stream = new ReadableStream<Uint8Array>({ start: (c) => { push = (x) => c.enqueue(new TextEncoder().encode(x)); } });
+    const reader = stream.getReader();
+    const acc = { text: '' };
+    await readUntil(reader, 'first', acc, 50); // times out with a read still pending
+    push('first');
+    push('second');
+    await readUntil(reader, 'second', acc, 1000);
+    expect(acc.text).toBe('firstsecond');
+  });
+});
 
 describe('GET live (SSE)', () => {
   it('rejects door and outsider before opening a stream', async () => {
