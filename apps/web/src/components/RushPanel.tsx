@@ -26,6 +26,7 @@ function Counters({ run }: { run: RushRunView }) {
     ['Paid', c.paid],
     ['Declined', c.declined],
     ['Sold out', c.soldOut],
+    ['Re-queued', c.requeued],
   ];
   return (
     <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">

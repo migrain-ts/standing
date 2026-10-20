@@ -21,7 +21,7 @@ describe('validateRush', () => {
 
 const run = (over: Partial<RushRunView['counters']>, status: RushRunView['status'] = 'running', requests = 0): RushRunView => ({
   id: 'r1', status, startedAt: '2026-10-18T10:00:00.000Z', params: ok, requests,
-  counters: { started: 0, queued: 0, admitted: 0, holdsOk: 0, holdsConflict: 0, paid: 0, declined: 0, abandoned: 0, expired: 0, soldOut: 0, errors: 0, ...over },
+  counters: { started: 0, queued: 0, admitted: 0, holdsOk: 0, holdsConflict: 0, paid: 0, declined: 0, abandoned: 0, expired: 0, soldOut: 0, requeued: 0, errors: 0, ...over },
 });
 const T = Date.parse('2026-10-18T10:00:10.000Z');
 

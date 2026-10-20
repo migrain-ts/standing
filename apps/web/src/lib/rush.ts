@@ -26,7 +26,7 @@ export function validateRush(form: RushForm): RushValidation {
 
 export type RushCounters = {
   started: number; queued: number; admitted: number; holdsOk: number; holdsConflict: number;
-  paid: number; declined: number; abandoned: number; expired: number; soldOut: number; errors: number;
+  paid: number; declined: number; abandoned: number; expired: number; soldOut: number; requeued: number; errors: number;
 };
 export type RushStatus = 'running' | 'finished' | 'stopped' | 'failed';
 export type RushRunView = {
