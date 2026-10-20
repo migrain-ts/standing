@@ -82,7 +82,6 @@ describe('rush integration', () => {
     const c = stats.counters;
     const sold = await expectConsistent(t, fx.eventId, c.paid);
     const atEnd = await takenAndOrders(t.db, fx.eventId);
-    console.info(`MARGIN taken ${atFlush.taken}->${atEnd.taken} orders ${atFlush.orders}->${atEnd.orders}`);
     // The flush hit a live sale: seats were still free, and buyers who lost their admission re-joined and kept buying.
     expect(atFlush.taken).toBeLessThan(CAPACITY);
     expect(atEnd.orders).toBeGreaterThan(atFlush.orders);

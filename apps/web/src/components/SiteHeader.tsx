@@ -2,7 +2,8 @@
 import Link from 'next/link';
 import { UserMenu } from '@/components/UserMenu';
 import { TicketLineIcon } from '@/components/icons';
-import { Button } from '@/components/ui/button';
+import { buttonVariants } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { useMe } from '@/lib/auth';
 import { navItems } from '@/lib/nav';
 
@@ -18,18 +19,18 @@ export function SiteHeader() {
         </Link>
         <nav aria-label="Primary" className="flex items-center gap-1">
           {navItems(me?.nav ?? null).map((item) => (
-            <Button key={item.href} asChild nativeButton={false} variant="ghost" size="sm" className="h-11 md:h-8">
-              <Link href={item.href}>{item.label}</Link>
-            </Button>
+            <Link key={item.href} href={item.href} className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'h-11 md:h-8')}>
+              {item.label}
+            </Link>
           ))}
         </nav>
         <div className="ml-auto">
           {me ? (
             <UserMenu user={me.user} />
           ) : (
-            <Button asChild nativeButton={false} size="sm">
-              <Link href="/login">Sign in</Link>
-            </Button>
+            <Link href="/login" className={cn(buttonVariants({ size: 'sm' }), 'h-11 md:h-8')}>
+              Sign in
+            </Link>
           )}
         </div>
       </div>
